@@ -348,26 +348,27 @@ vanguard:[
 "...1aaaaa1...",
 "....11111...."],
 goliath:[
-"......1111111......",
-"....15555555551....",
-"..155555555555551..",
-".15555555555555551.",
-"1555555566655555551",
+"...11111111111111..",
+"..1555655555565551.",
+".155555555555555551",
+"1555565555555655551",
 "1555555555555555551",
-"1553333355533333551",
-"1533333335333333351",
+"1555355553555535551",
+"1553335533533553351",
+"1533333333333333331",
+"1322222233322222231",
+"1332211233321122331",
+"1333771333331773331",
+"1332222333332222331",
+"1333333344433333331",
+"1233333422243333321",
 "1223333333333333221",
-"1222233322233322221",
-"1327733333333377231",
-"1331733333333371331",
-"1333333333333333331",
-"1333333323233333331",
-"1333333223223333331",
-"1331111111111111331",
-"1337171717171717331",
-"1331111111111111331",
-".13333333333333331.",
-"...1111111111111..."],
+"1231111111111111321",
+"1231717171717171321",
+"1231777777777771321",
+"1223111111111113221",
+".12333333333333321.",
+"..111111111111111.."],
 weaver:[
 "....11111....",
 "..113333311..",
@@ -524,7 +525,7 @@ vorak:[
 var HK={
 ironclad:{"1":"#120a12","3":"#d8322c","4":"#f26b4e","6":"#f6c944","7":"#ffffff"},
 vanguard:{"1":"#0b0e1c","3":"#2f5bd0","6":"#dfe6f5","9":"#1b3480","a":"#f0b27a","b":"#c2835a"},
-goliath:{"1":"#0a1408","2":"#2f5c22","3":"#4e9c33","4":"#79c74e","5":"#14100f","6":"#2f2b30","7":"#f4fff0"},
+goliath:{"1":"#071005","2":"#2c5214","3":"#4f8a22","4":"#77b83a","5":"#0d0d12","6":"#2a2f45","7":"#f4fff0"},
 weaver:{"1":"#12060a","2":"#7d1420","3":"#c4212f","4":"#e4515c","7":"#f2f2ff"},
 stormcall:{"1":"#0c1018","3":"#b9c2d6","6":"#eef3ff","7":"#3fa9ff","a":"#f0b27a","b":"#c2835a"},
 malvok:{"1":"#14181c","2":"#566068","3":"#8e9aa4","4":"#cfd8de","9":"#6dff7a"},
@@ -626,12 +627,12 @@ titan:{
  pal:{o:"#1d1030",d:"#7b4fa8",m:"#b07fd6",l:"#d8b6f0",a1:"#a5822c",a2:"#e0c256",g:"#ffd23f"},
  legPal:{o:"#141008",d:"#2f2413",m:"#4a3a22",l:"#66502f"}},
 goliath:{
- name:"GOLIATH", rar:"rare", boostPrice:2500, sc:1.5, bulk:1.45, headLift:7, tag:"Nine feet of green bad mood.",
+ name:"GOLIATH", rar:"rare", boostPrice:2500, sc:1.5, bulk:1.45, headLift:3, tag:"Nine feet of green rage. Smashes first.",
  hp:300, spd:1.35, light:30, lightRange:52, lightCd:30, hitFrame:9,
  sp:"CRUSHING KICK", spDmg:65, spCost:50, guard:.32,
  atkLbl:"PUNCH", spLbl:"KICK",
  note:"Biggest and toughest — 300 HP of green muscle. Punch 30, flying kick 65 and Vorak goes flying.",
- pal:{o:"#0a1408",d:"#2f5c22",m:"#4e9c33",l:"#79c74e",a1:"#6b4a1e",a2:"#a8752c",g:"#ffe14a"}}
+ pal:{o:"#071005",d:"#2c5214",m:"#4f8a22",l:"#77b83a",a1:"#3a2066",a2:"#5b3596",g:"#ffe14a"}}
 };
 var RARITY={
  common:{name:"COMMON",col:"#9fb0c4",weight:40},
@@ -754,15 +755,18 @@ function drawHero(f){
   var bare=(f.id==="goliath"), acc=bare?p.l:p.a1, bul=bare?0.5:0.16;
   var P=heroPose(f), lean=P.lean*dir*sc, bob=(P.bob-P.crouch*2)*sc;
   var hipY=fy-R.hip+P.crouch*2*sc, shY=fy-R.sh+bob+P.crouch*2*sc, hipX=cx, shX=cx+lean;
+  /* a bare-chested bruiser's arms hang from the ends of his wide shoulders */
+  var sOff=bare?(R.torsoW+10*sc)*0.3:0, aY=shY+(bare?3*sc:0), bX=shX-dir*sOff, fX=shX+dir*sOff;
 
   G.globalAlpha=.3; px(cx-13*sc,GROUND+2,27*sc,4,"#000"); G.globalAlpha=1;
 
   var kb=joint(hipX,hipY,P.lb[0],R.thigh,dir), fb=joint(kb.x,kb.y,P.lb[0]+P.lb[1],R.shin,dir);
   mlimb(hipX,hipY,kb.x,kb.y,R.tw*1.08,R.tw*0.72,bul,LP,true);
+  if(bare) tornShorts(hipX,hipY,kb,R,sc,p,true);
   mlimb(kb.x,kb.y,fb.x,fb.y,R.sw*1.02,R.sw*0.64,bul*0.75,LP,true);
   stroke(fb.x-dir,fb.y+2*sc,fb.x+dir*4*sc,fb.y+2*sc,4*sc,CC(LP.o));
-  var eb=joint(shX,shY,P.ab[0],R.upper,dir), hb=joint(eb.x,eb.y,P.ab[0]+P.ab[1],R.fore,dir);
-  mlimb(shX,shY,eb.x,eb.y,R.aw*(bare?1.5:1.12),R.aw*0.74,bul,p,true);
+  var eb=joint(bX,aY,P.ab[0],R.upper,dir), hb=joint(eb.x,eb.y,P.ab[0]+P.ab[1],R.fore,dir);
+  mlimb(bX,aY,eb.x,eb.y,R.aw*(bare?1.5:1.12),R.aw*0.74,bul,p,true);
   mlimb(eb.x,eb.y,hb.x,hb.y,R.fw*1.14,R.fw*0.72,bul*0.6,p,true);
   disc(hb.x,hb.y,(bare?3.6:2.4)*sc,CC(p.d));
 
@@ -792,6 +796,7 @@ function drawHero(f){
   var kf=joint(hipX,hipY,P.la[0],R.thigh,dir), ff=joint(kf.x,kf.y,P.la[0]+P.la[1],R.shin,dir);
   mlimb(hipX,hipY,kf.x,kf.y,R.tw*1.08,R.tw*0.72,bul,LP,false);
   mlimb(kf.x,kf.y,ff.x,ff.y,R.sw*1.02,R.sw*0.64,bul*0.75,LP,false);
+  if(bare) tornShorts(hipX,hipY,kf,R,sc,p,false);
   stroke(ff.x-dir,ff.y+2*sc,ff.x+dir*4*sc,ff.y+2*sc,4*sc,CC(LP.o));
   stroke(ff.x-dir,ff.y+1*sc,ff.x+dir*3*sc,ff.y+1*sc,3*sc,CC(bare?LP.m:acc));
   if(f.flying){
@@ -815,8 +820,8 @@ function drawHero(f){
     disc(ff.x+dir*3*sc,ff.y,6*sc,CC(p.a1)); disc(ff.x+dir*3*sc,ff.y,4*sc,"#ffe14a");
   }
 
-  var ef=joint(shX,shY,P.aa[0],R.upper,dir), hf2=joint(ef.x,ef.y,P.aa[0]+P.aa[1],R.fore,dir);
-  mlimb(shX,shY,ef.x,ef.y,R.aw*(bare?1.5:1.12),R.aw*0.74,bul,p,false);
+  var ef=joint(fX,aY,P.aa[0],R.upper,dir), hf2=joint(ef.x,ef.y,P.aa[0]+P.aa[1],R.fore,dir);
+  mlimb(fX,aY,ef.x,ef.y,R.aw*(bare?1.5:1.12),R.aw*0.74,bul,p,false);
   mlimb(ef.x,ef.y,hf2.x,hf2.y,R.fw*1.14,R.fw*0.72,bul*0.6,p,false);
   disc(hf2.x,hf2.y,(bare?4.4:3.2)*sc,CC(p.o));
   disc(hf2.x,hf2.y,(bare?3.4:2.3)*sc,CC(bare?p.m:acc));
@@ -832,8 +837,19 @@ function drawHero(f){
   }
   FL=null;
 }
+/* ripped purple shorts over the top of one thigh, cut off with a ragged hem */
+function tornShorts(hx,hy,knee,R,sc,p,back){
+  var SH={o:p.o,d:p.a1,m:p.a2,l:"#7d55c0"};
+  var ex=hx+(knee.x-hx)*0.62, ey=hy+(knee.y-hy)*0.62;
+  mlimb(hx,hy-2*sc,ex,ey,R.tw*1.22,R.tw*1.02,0.2,SH,back);
+  var hw=Math.round(R.tw*0.6);
+  for(var k=-hw;k<=hw;k+=Math.max(2,Math.round(2*sc))){
+    var dl=Math.round(((k*7+hw*3)%5+5)%5*0.6*sc)+Math.round(sc);
+    px(ex+k,ey,Math.max(1,Math.round(1.5*sc)),dl,CC(back?SH.d:SH.m));
+  }
+}
 function drawTorso(f,shX,shY,hipX,hipY,dir,p,R,sc){
-  var id=f.id, topW=(id==="goliath"?R.torsoW+7*sc:R.torsoW), botW=R.torsoW-(id==="goliath"?2*sc:4*sc);
+  var id=f.id, topW=(id==="goliath"?R.torsoW+10*sc:R.torsoW), botW=R.torsoW-(id==="goliath"?3*sc:4*sc);
   var n=Math.max(1,hipY-shY);
   for(var i=0;i<=n;i++){
     var t=i/n, ww=Math.round(topW+(botW-topW)*t);
@@ -844,16 +860,30 @@ function drawTorso(f,shX,shY,hipX,hipY,dir,p,R,sc){
   px(shX-topW/2-1,shY-1,topW+2,2,CC(p.o));
   var muscle=(id==="goliath");
   if(muscle){
-    /* deltoids are the top of the arm now - drawn in drawHero */
+    /* traps: a slope of muscle from the neck out to the shoulders */
+    var tH=Math.round(6*sc);
+    for(var tr=1;tr<=tH;tr++){ var tw3=Math.round(topW*(1-tr/(tH+3)));
+      px(shX-tw3/2-1,shY-tr,tw3+2,1,CC(p.o)); px(shX-tw3/2,shY-tr,tw3,1,CC(p.m));
+      px(shX-tw3/2+(dir>0?tw3-2:0),shY-tr,2,1,CC(p.l)); }
+    /* pecs, sternum and abs */
+    var cH=hipY-shY, pw=Math.round(topW*0.36);
+    px(shX-pw,shY+Math.round(cH*0.36),pw*2,1,CC(p.d));
+    px(shX-pw,shY+Math.round(cH*0.36)-2,pw*2,1,CC(p.l));
+    px(shX-pw+1,shY+Math.round(cH*0.36)+1,pw-2,1,CC(p.o));
+    px(shX+2,shY+Math.round(cH*0.36)+1,pw-2,1,CC(p.o));
+    var ax=Math.round(shX+(hipX-shX)*0.6);
+    px(ax,shY+3,1,cH-9*sc,CC(p.d));
+    for(var ab=0;ab<3;ab++){ var ay=shY+Math.round(cH*(0.52+ab*0.13));
+      px(ax-Math.round(5*sc),ay,Math.round(10*sc)+1,1,CC(p.d)); }
   } else {
     pauldron(shX-dir*(topW/2-1),shY+2,3.4*sc,2.2*sc,CC(p.o),CC(p.d),CC(p.m),CC(p.o));
     pauldron(shX+dir*(topW/2-1),shY+1,4.6*sc,2.9*sc,CC(p.o),CC(p.a1),CC(p.a2),CC(p.d));
   }
   if(muscle){
     px(hipX-botW/2-4,hipY-7*sc,botW+8,11*sc,CC(p.o));
-    px(hipX-botW/2-3,hipY-6*sc,botW+6,9*sc,CC("#4a2f7a"));
-    px(hipX-botW/2-3,hipY-6*sc,botW+6,2*sc,CC("#6a49a8"));
-    for(var tz=0;tz<4;tz++) px(hipX-botW/2-3+tz*5*sc,hipY+3*sc,3*sc,2*sc,CC("#4a2f7a"));
+    px(hipX-botW/2-3,hipY-6*sc,botW+6,9*sc,CC(p.a2));
+    px(hipX-botW/2-3,hipY-6*sc,botW+6,2*sc,CC("#7d55c0"));
+    px(hipX-botW/2-3,hipY-2*sc,botW+6,1,CC(p.a1));
   } else {
     px(hipX-botW/2-2,hipY-4*sc,botW+4,4*sc,CC(p.o));
     px(hipX-botW/2-1,hipY-3*sc,botW+2,2*sc,CC(p.a1));
