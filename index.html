@@ -214,7 +214,7 @@ button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
     <div id="shoprow">
       <button class="small boostbtn" id="btnBoost">BOOST</button>
       <button class="small cratebtn" id="btnCrate">CRATE · $500</button>
-      <button class="small vsbtn" id="btnVs">ONLINE DUEL</button>
+      <button class="small vsbtn" id="btnVs">ONLINE PVP</button>
     </div>
     <div id="crateout"></div>
     <div id="cheatrow"><input id="cheat" type="text" inputmode="numeric" placeholder="code" maxlength="8"><button class="small" id="btnCheat">ENTER</button></div>
@@ -227,12 +227,13 @@ button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
   </div>
 
   <div class="screen hide" id="scVs">
-    <div class="title" style="font-size:14px">ONLINE DUEL</div>
+    <div class="title" style="font-size:14px" id="vsTitle">ONLINE DUEL</div>
     <div id="vsStatus" class="sub">Pick host or join</div>
     <div id="codeBox"></div>
     <div id="vsBoard"></div>
     <div id="vsRow">
-      <button class="small" id="btnHost">HOST GAME</button>
+      <button class="small" id="btnHost">HOST DUEL</button>
+      <button class="small" id="btnHost3">HOST 1v1v1</button>
       <input id="joinCode" type="text" placeholder="CODE" maxlength="4" autocomplete="off"
         autocapitalize="characters" autocorrect="off" spellcheck="false">
       <button class="small" id="btnJoin">JOIN</button>
@@ -241,7 +242,7 @@ button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
       <button class="big" id="btnReady" style="display:none">READY</button>
       <button class="small" id="btnVsBack">BACK</button>
     </div>
-    <div id="vsHint" class="blurb">Host a game, tell your friend the 4-letter code, and they join with it. Works anywhere you host this file yourself.</div>
+    <div id="vsHint" class="blurb">Host a duel (2 players) or a 1v1v1 (3 players, last one standing), share the 4-letter code, and friends join with it. Works anywhere you host this file yourself.</div>
   </div>
 
   <div id="crateScreen">
@@ -2491,37 +2492,92 @@ function brokerRetry(label,again){
   vsLog(label+": server busy, retrying…");
   setTimeout(again,1500*NET.tries);
 }
-var NET={peer:null,conn:null,role:null,code:null,open:false,codeLive:false,
-  joinTimer:null,bi:0,tries:0,ready:false,foeReady:false,
-  foeHero:"ironclad",foeBoost:0,err:null};
+/* Everyone links to the host. The host numbers the players (0 = host),
+   passes every message on to the others, and routes each 'hit' to the
+   player it was aimed at. A duel lobby holds 2; a 1v1v1 lobby holds 3
+   and the last one standing wins. */
+var NET={peer:null,conns:[],role:null,code:null,open:false,codeLive:false,
+  joinTimer:null,bi:0,tries:0,ready:false,me:0,max:2,players:{},err:null};
+var FOECOL=["#ff5ad0","#5ad8ff","#ffb347"];
 function vsLog(msg){ var el=document.getElementById('vsStatus'); if(el) el.textContent=msg; }
 function makeCode(){
   var A="ABCDEFGHJKLMNPQRSTUVWXYZ23456789", s="";
   for(var i=0;i<4;i++) s+=A.charAt(Math.floor(Math.random()*A.length));
   return s;
 }
-function peerId(code){ return "laststand-v1-"+code; }
+function peerId(code){ return "laststand-v2-"+code; }
 function netAvailable(){ return (typeof Peer!=="undefined"); }
-function netSend(o){ try{ if(NET.conn&&NET.conn.open) NET.conn.send(o); }catch(e){} }
-function bindConn(c){
-  NET.conn=c;
+function playerCount(){ return 1+Object.keys(NET.players).length; }
+/* send to every open link except src; the host only sends a targeted
+   message to its target */
+function relay(o,src){
+  for(var i=0;i<NET.conns.length;i++){ var c=NET.conns[i];
+    if(c===src) continue;
+    if(NET.role==="host"&&o.to!=null&&c.pid!==o.to) continue;
+    try{ if(c.open) c.send(o); }catch(e){} }
+}
+function netSend(o){ o.from=NET.me; relay(o,null); }
+function lobbyBroadcast(){
+  if(NET.role!=="host") return;
+  var L=[{pid:0,hero:S.pick,bs:(BOOST[S.pick]||0),ready:NET.ready}];
+  for(var p in NET.players){ var q=NET.players[p]; L.push({pid:+p,hero:q.hero,bs:q.bs,ready:q.ready}); }
+  netSend({t:'lobby',max:NET.max,list:L});
+}
+function freeSlot(){ for(var i=1;i<NET.max;i++) if(!NET.players[i]) return i; return -1; }
+function hostConn(c){
   c.on('open',function(){
-    NET.open=true; NET.tries=0; clearTimeout(NET.joinTimer);
-    netSend({t:'hello',hero:S.pick,bs:(BOOST[S.pick]||0)});
-    vsLog("Connected! Both press READY");
-    updateVsUI();
+    var pid=freeSlot();
+    if(pid<0||S.scene==="fight"){
+      try{ c.send({t:'full'}); }catch(e){}
+      setTimeout(function(){ try{ c.close(); }catch(e){} },400); return;
+    }
+    c.pid=pid; NET.conns.push(c);
+    NET.players[pid]={hero:"ironclad",bs:0,ready:false};
+    NET.open=true; NET.tries=0;
+    try{ c.send({t:'welcome',you:pid,max:NET.max,from:0}); }catch(e){}
+    vsLog(playerCount()<NET.max?"Player joined — waiting for "+(NET.max-playerCount())+" more…"
+      :"Everyone's here! All press READY");
+    lobbyBroadcast(); updateVsUI();
   });
+  c.on('data',function(d){
+    if(c.pid==null||!d||!d.t) return;
+    d.from=c.pid;
+    if(d.t==='hello'||d.t==='ready'){
+      var q=NET.players[c.pid]; if(!q) return;
+      if(d.t==='hello'){ q.hero=CHARS[d.hero]?d.hero:"ironclad"; q.bs=+d.bs||0; }
+      else q.ready=!!d.v;
+      lobbyBroadcast(); updateVsUI(); tryStartDuel(); return;
+    }
+    if(d.to==null||d.to===0) onNetData(d);
+    if(d.to!==0) relay(d,c);
+  });
+  c.on('close',function(){
+    var i=NET.conns.indexOf(c); if(i<0) return;
+    NET.conns.splice(i,1); delete NET.players[c.pid];
+    NET.open=NET.conns.length>0;
+    netSend({t:'gone',pid:c.pid});
+    foeGone(c.pid);
+    if(S.scene!=="fight") vsLog("A player left");
+    lobbyBroadcast(); updateVsUI();
+  });
+  c.on('error',function(e){ vsLog("Connection error"+(e&&e.type?" ("+e.type+")":"")); });
+}
+function guestConn(c){
+  NET.conns=[c];
+  c.on('open',function(){ clearTimeout(NET.joinTimer); if(!NET.open&&!NET.full) vsLog("Connected — joining lobby…"); });
   c.on('data',function(d){ onNetData(d); });
-  c.on('close',function(){ NET.open=false; NET.foeReady=false;
-    vsLog("Opponent disconnected");
-    if(S.scene==="fight"&&S.mode==="pvp") endDuel(true,"opponent left");
+  c.on('close',function(){
+    NET.open=false; NET.players={};
+    if(!NET.full) vsLog("Host disconnected");
+    if(S.foes) for(var p in S.foes) foeGone(+p);
     updateVsUI(); });
   c.on('error',function(e){ vsLog("Connection error"+(e&&e.type?" ("+e.type+")":"")); });
 }
-function hostGame(keepCode){
+function hostGame(keepCode,max){
   if(!netAvailable()){ vsLog("Multiplayer unavailable here"); return; }
   cleanupNet();
-  NET.role="host";
+  NET.role="host"; NET.me=0;
+  if(max) NET.max=max;
   if(!keepCode||!NET.code) NET.code=makeCode();
   if(!keepCode){ NET.bi=0; NET.tries=0; }
   vsLog("Starting host…");
@@ -2530,10 +2586,10 @@ function hostGame(keepCode){
   }catch(e){ vsLog("Could not start host"); return; }
   NET.peer.on('open',function(){
     NET.codeLive=true; NET.tries=0;
-    vsLog("Waiting for a friend to join…");
+    vsLog(NET.max>2?"Waiting for 2 friends to join…":"Waiting for a friend to join…");
     updateVsUI();
   });
-  NET.peer.on('connection',function(c){ bindConn(c); });
+  NET.peer.on('connection',function(c){ hostConn(c); });
   NET.peer.on('error',function(e){
     var t=(e&&e.type)||"error";
     if(t==="unavailable-id"){ NET.code=makeCode(); vsLog("Retrying…");
@@ -2556,7 +2612,7 @@ function joinGame(code,retrying){
   NET.peer.on('open',function(){
     var c=NET.peer.connect(peerId(code),{reliable:true});
     if(!c){ vsLog("No game with that code"); return; }
-    bindConn(c);
+    guestConn(c);
     clearTimeout(NET.joinTimer);
     NET.joinTimer=setTimeout(function(){
       if(NET.open) return;
@@ -2576,60 +2632,100 @@ function joinGame(code,retrying){
   updateVsUI();
 }
 function cleanupNet(){
-  try{ if(NET.conn) NET.conn.close(); }catch(e){}
+  NET.conns.forEach(function(c){ try{ c.close(); }catch(e){} });
   try{ if(NET.peer) NET.peer.destroy(); }catch(e){}
   clearTimeout(NET.joinTimer); NET.joinTimer=null;
-  NET.peer=null; NET.conn=null; NET.open=false; NET.codeLive=false;
-  NET.ready=false; NET.foeReady=false;
+  NET.peer=null; NET.conns=[]; NET.open=false; NET.codeLive=false;
+  NET.ready=false; NET.players={}; NET.me=0; NET.full=false;
 }
 function onNetData(d){
   if(!d||!d.t) return;
-  if(d.t==='hello'){ NET.foeHero=CHARS[d.hero]?d.hero:"ironclad"; NET.foeBoost=+d.bs||0;
-    netSend({t:'hello2',hero:S.pick,bs:(BOOST[S.pick]||0)}); updateVsUI(); }
-  else if(d.t==='hello2'){ NET.foeHero=CHARS[d.hero]?d.hero:"ironclad"; NET.foeBoost=+d.bs||0; updateVsUI(); }
-  else if(d.t==='ready'){ NET.foeReady=!!d.v; updateVsUI(); tryStartDuel(); }
-  else if(d.t==='start'){ beginDuel(d.map); }
+  if(d.t==='welcome'){ NET.me=+d.you; NET.max=+d.max||2; NET.open=true; NET.tries=0;
+    netSend({t:'hello',hero:S.pick,bs:(BOOST[S.pick]||0)});
+    vsLog("Connected! Press READY when everyone's in"); updateVsUI(); }
+  else if(d.t==='full'){ NET.full=true; vsLog("That lobby is full or already fighting"); }
+  else if(d.t==='lobby'){
+    NET.max=+d.max||2; NET.players={};
+    (d.list||[]).forEach(function(q){ if(q.pid===NET.me) return;
+      NET.players[q.pid]={hero:CHARS[q.hero]?q.hero:"ironclad",bs:+q.bs||0,ready:!!q.ready}; });
+    updateVsUI(); }
+  else if(d.t==='start'){ beginDuel(d.map,d.ids); }
+  else if(d.t==='gone'){ foeGone(+d.pid); }
   else if(d.t==='s'){
-    if(!S.foe) return;
-    S.foe.tx=+d.x; S.foe.z=+d.z||0; S.foe.st=d.st||"idle"; S.foe.dir=+d.d||-1;
-    S.foe.hp=+d.hp; S.foe.maxhp=+d.mhp||S.foe.maxhp;
-    S.foe.buff=d.bf?60:0;
-    if(d.dead&&S.scene==="fight"&&S.hero&&S.hero.hp>0) endDuel(true);
+    var f=S.foes&&S.foes[d.from]; if(!f||f.gone) return;
+    f.tx=+d.x; f.z=+d.z||0; f.st=d.st||"idle"; f.dir=+d.d||-1;
+    f.hp=+d.hp; f.maxhp=+d.mhp||f.maxhp;
+    f.buff=d.bf?60:0;
+    if(d.dead){ f.hp=0; checkWin(); }
   }
   else if(d.t==='hit'){
-    if(S.mode!=="pvp"||S.scene!=="fight"||!S.hero) return;
+    if(d.to!==NET.me||S.mode!=="pvp"||S.scene!=="fight"||!S.hero) return;
     damageHero(Math.max(1,Math.min(400,Math.round(+d.dmg||0))),+d.knock||2,!!d.unb);
     if(d.slow) S.hero.netSlow=Math.max(S.hero.netSlow||0,Math.min(300,+d.slow));
     if(d.dot) S.hero.netDot={left:Math.min(10,+d.dot.n||0),every:24,t:24,dmg:Math.min(20,+d.dot.d||0)};
   }
-  else if(d.t==='rematch'){ if(S.scene==="end"){ NET.ready=false; NET.foeReady=false; setScene("vs"); } }
+  else if(d.t==='rematch'){ if(S.scene==="end") backToLobby(); }
+}
+function backToLobby(){
+  NET.ready=false;
+  if(NET.role==="host"){ for(var p in NET.players) NET.players[p].ready=false; lobbyBroadcast(); }
+  else netSend({t:'ready',v:false});
+  setScene("vs");
 }
 function pvpDamage(amount,knock,extra){
-  if(!S.hero) return;
+  var f=S.foe;
+  if(!S.hero||!f||f.hp<=0) return;
   var a=Math.round(amount*(S.hero.atkMul||1));
-  var msg={t:'hit',dmg:a,knock:knock||2};
+  var msg={t:'hit',to:f.pid,dmg:a,knock:knock||2};
   if(extra&&extra.slow) msg.slow=extra.slow;
   if(extra&&extra.dot) msg.dot=extra.dot;
   netSend(msg);
+  S.dealt+=a;
   S.combo++; S.comboT=100; S.hero.en=Math.min(100,S.hero.en+7);
-  if(S.foe){ S.foe.flash=10;
-    popNum(S.foe.x+(Math.random()*18-9),S.foe.fy-56,a,"#ffd23f");
-    spark(S.foe.x,S.foe.fy-30,7,"#ffd23f",5,3); }
+  f.flash=10;
+  popNum(f.x+(Math.random()*18-9),f.fy-56,a,"#ffd23f");
+  spark(f.x,f.fy-30,7,"#ffd23f",5,3);
   shake(4); S.hitstop=2; SFX.hit();
 }
-function makeFoe(){
-  var id=CHARS[NET.foeHero]?NET.foeHero:"ironclad", c=CHARS[id];
-  var bs=Math.min(MAXBOOST,NET.foeBoost||0), sc=boostScale(c,bs);
+/* where each slot starts: spread evenly, facing the middle */
+function spawnX(i,n){
+  var xs=(n>2)?[0.28,0.5,0.72]:[0.42,0.58];
+  return Math.round(WORLDW*xs[Math.max(0,Math.min(xs.length-1,i))]);
+}
+function makeFoe(pid,x){
+  var q=NET.players[pid]||{hero:"ironclad",bs:0};
+  var id=CHARS[q.hero]?q.hero:"ironclad", c=CHARS[id];
+  var bs=Math.min(MAXBOOST,q.bs||0), sc=boostScale(c,bs);
   var mhp=Math.round(c.hp*(1+0.5*bs));
-  return {id:id,c:c,pal:c.pal,sc:sc,bs:bs,R:rigFor(sc,c.bulk),
-    x:Math.round(WORLDW*0.58),tx:Math.round(WORLDW*0.58),z:0,dir:-1,fy:GROUND,
+  return {pid:pid,id:id,c:c,pal:c.pal,sc:sc,bs:bs,R:rigFor(sc,c.bulk),
+    x:x,tx:x,z:0,dir:(x>WORLDW/2)?-1:1,fy:GROUND,
     hp:mhp,maxhp:mhp,st:"idle",t:0,flash:0,buff:0};
 }
-function updFoe(){
-  var f=S.foe; if(!f) return;
+function updFoe(f){
   f.x+=(f.tx-f.x)*0.34;
   f.fy=GROUND-f.z; f.t=S.frames;
   if(f.flash>0) f.flash--;
+}
+function aliveFoes(){
+  var n=0; if(S.foes) for(var p in S.foes) if(S.foes[p].hp>0) n++;
+  return n;
+}
+/* your target is whoever's closest and still up */
+function nearestFoe(){
+  var h=S.hero,best=null,bd=1e9,any=null;
+  for(var p in S.foes){ var f=S.foes[p]; any=f;
+    if(f.hp<=0) continue;
+    var d=Math.abs(f.x-(h?h.x:0)); if(d<bd){ bd=d; best=f; } }
+  return best||any;
+}
+function foeGone(pid){
+  var f=S.foes&&S.foes[pid]; if(!f||f.gone) return;
+  f.gone=true; f.hp=0;
+  checkWin(S.mode==="pvp"&&aliveFoes()===0?(NET.max>2?"everyone else left":"opponent left"):null);
+}
+function checkWin(why){
+  if(S.mode!=="pvp"||S.scene!=="fight"||!S.hero||S.hero.hp<=0) return;
+  if(aliveFoes()===0) endDuel(true,why);
 }
 function sendState(){
   var h=S.hero; if(!h) return;
@@ -2637,15 +2733,26 @@ function sendState(){
     hp:Math.round(Math.max(0,h.hp)),mhp:h.maxhp,dead:(h.hp<=0)?1:0,bf:(h.buff>0)?1:0});
 }
 function foeBar(f){
-  var w=Math.min(150,WW*0.5), cm=(S.cam||0);
+  var w=Math.min(150,WW*(NET.max>2?0.34:0.5)), cm=(S.cam||0), col=FOECOL[f.pid]||FOECOL[0];
+  /* off-screen in a 1v1v1: a small marker on that edge instead of a bar */
+  if(NET.max>2&&(f.x<cm-10||f.x>cm+WW+10)){
+    var right=f.x>cm, lbl=right?("P"+(f.pid+1)+" "+Math.round(f.hp)+" ▶"):("◀ P"+(f.pid+1)+" "+Math.round(f.hp));
+    var my=Math.round(GROUND-120-f.pid*16);
+    G.font="7px 'Press Start 2P',monospace"; G.textAlign=right?"right":"left";
+    var mx=right?cm+WW-6:cm+6;
+    G.fillStyle="#000"; G.fillText(lbl,mx+1,my+1);
+    G.fillStyle=col; G.fillText(lbl,mx,my);
+    return;
+  }
   var x=Math.round(f.x-w/2), y=Math.round(f.fy-58*(f.sc||1)-22);
   if(x<cm+4)x=cm+4; if(x+w>cm+WW-4)x=cm+WW-4-w;
   px(x-2,y-2,w+4,14,"#0d0716"); px(x,y,w,10,"#2a1030");
   var r=Math.max(0,f.hp)/f.maxhp;
-  px(x,y,w*r,10,"#ff5ad0"); px(x,y,w*r,4,"#ffc0ec");
+  px(x,y,w*r,10,col); px(x,y,w*r,4,"rgba(255,255,255,.55)");
+  var nm="P"+(f.pid+1)+" "+f.c.name;
   G.font="7px 'Press Start 2P',monospace"; G.textAlign="left";
-  G.fillStyle="#000"; G.fillText(f.c.name,x+1,y-3);
-  G.fillStyle="#ffd6ff"; G.fillText(f.c.name,x,y-4);
+  G.fillStyle="#000"; G.fillText(nm,x+1,y-3);
+  G.fillStyle="#ffd6ff"; G.fillText(nm,x,y-4);
   G.textAlign="right";
   G.fillStyle="#000"; G.fillText(Math.max(0,Math.round(f.hp))+"",x+w+1,y-3);
   G.fillStyle="#ffd6ff"; G.fillText(Math.max(0,Math.round(f.hp))+"",x+w,y-4);
@@ -2665,8 +2772,9 @@ function updCam(){
 }
 function step(){ S.frames++;
   if(S.hitstop>0){S.hitstop--;return;}
+  if(S.mode==="pvp"&&S.foes){ for(var p in S.foes) updFoe(S.foes[p]); S.foe=nearestFoe(); }
   updHero();
-  if(S.mode==="pvp"){ updFoe(); if(S.frames%4===0) sendState(); }
+  if(S.mode==="pvp"){ if(S.frames%4===0) sendState(); }
   else { updBoss(); updSentries(); }
   updShots(); updFx(); updCam();
   if(S.shake>0)S.shake*=.82; }
@@ -2722,7 +2830,9 @@ function render(){
   drawBG();
   if(S.scene==="title") titleCast();
   if(S.scene==="select") previewStage();
-  if(S.mode==="pvp"&&S.foe&&S.scene==="fight"){ drawHero(S.foe); foeBar(S.foe); }
+  if(S.mode==="pvp"&&S.foes&&S.scene==="fight"){
+    for(var p in S.foes){ var f=S.foes[p]; if(!f.gone) drawHero(f); }
+    for(var q in S.foes){ var g=S.foes[q]; if(g.hp>0) foeBar(g); } }
   else if(S.boss&&S.scene!=="title") drawBoss(S.boss);
   if(S.scene==="fight"&&S.mode!=="pvp") drawSentries();
   if(S.hero&&S.scene!=="title") drawHero(S.hero);
@@ -2771,7 +2881,7 @@ function setScene(n){ S.scene=n;
   if(n==="vs"){ show(scVs); updateVsUI(); } }
 function startFight(){
   if(isLocked(S.pick)) return;
-  S.mode="pve"; S.foe=null;
+  S.mode="pve"; S.foe=null; S.foes=null;
   stopTune();
   buildMap();
   S.hero=makeHero(S.pick); S.boss=makeBoss();
@@ -2829,36 +2939,56 @@ function updateVsUI(){
   var bd=document.getElementById('vsBoard'), cb=document.getElementById('codeBox');
   var rb=document.getElementById('btnReady'), row=document.getElementById('vsRow');
   var hint=document.getElementById('vsHint');
+  document.getElementById('vsTitle').textContent=(NET.role&&NET.max>2)?"ONLINE 1v1v1":"ONLINE DUEL";
   bd.innerHTML="";
-  cb.textContent=(NET.role==="host"&&NET.code&&NET.codeLive)?NET.code:"";
+  cb.textContent=(NET.code&&(NET.codeLive||NET.open))?NET.code:"";
   if(!netAvailable()){
     vsLog("Multiplayer needs the downloaded file");
     hint.textContent="Open this game from your own hosted copy (GitHub Pages) and online duels will work.";
     row.style.display="none"; rb.style.display="none"; return;
   }
   row.style.display=NET.open?"none":"flex";
+  var slots=NET.role?NET.max:2;
   bd.appendChild(vsCard(S.pick,"YOU",NET.ready,BOOST[S.pick]||0));
-  var vs=document.createElement('div'); vs.className='vsVs'; vs.textContent="VS"; bd.appendChild(vs);
-  if(NET.open) bd.appendChild(vsCard(NET.foeHero,"THEM",NET.foeReady,NET.foeBoost));
-  else { var w=document.createElement('div'); w.className='vsCard';
-    w.innerHTML='<div class="vn">WAITING</div><div class="vs2">no opponent</div>'; bd.appendChild(w); }
+  for(var i=0;i<slots;i++){
+    if(i===NET.me&&NET.role) continue;
+    if(!NET.role&&i===0) continue;
+    var vs=document.createElement('div'); vs.className='vsVs'; vs.textContent="VS"; bd.appendChild(vs);
+    var q=NET.players[i];
+    if(q) bd.appendChild(vsCard(q.hero,"P"+(i+1),q.ready,q.bs));
+    else { var w=document.createElement('div'); w.className='vsCard';
+      w.innerHTML='<div class="vn">WAITING</div><div class="vs2">open slot</div>'; bd.appendChild(w); }
+  }
   rb.style.display=NET.open?"":"none";
   rb.textContent=NET.ready?"READY ✓ (tap to cancel)":"READY";
   hint.style.display=NET.open?"none":"";
 }
-function tryStartDuel(){
-  if(!NET.open||!NET.ready||!NET.foeReady) return;
-  if(S.scene==="fight") return;
-  if(NET.role==="host"){ netSend({t:'start',map:S.map}); beginDuel(S.map); }
+function allReady(){
+  if(!NET.ready) return false;
+  for(var p in NET.players) if(!NET.players[p].ready) return false;
+  return true;
 }
-function beginDuel(map){
+function tryStartDuel(){
+  if(NET.role!=="host"||S.scene==="fight") return;
+  if(playerCount()<NET.max||!allReady()) return;
+  var ids=[0]; for(var p in NET.players) ids.push(+p);
+  ids.sort();
+  netSend({t:'start',map:S.map,ids:ids}); beginDuel(S.map,ids);
+}
+function beginDuel(map,ids){
   if(S.scene==="fight") return;
   if(map&&MAPS[map]&&(!MAPS[map].price||OWNED['map_'+map])) S.map=map;
+  ids=(ids&&ids.length)?ids:[0,1];
   S.mode="pvp"; S.boss=null;
+  /* everyone's ready flag is spent once the fight starts */
+  NET.ready=false; for(var p in NET.players) NET.players[p].ready=false;
   buildMap();
   S.hero=makeHero(S.pick);
-  S.hero.x=Math.round(WORLDW*0.42); S.hero.dir=1;
-  S.foe=makeFoe();
+  var mi=Math.max(0,ids.indexOf(NET.me));
+  S.hero.x=spawnX(mi,ids.length); S.hero.dir=(S.hero.x>WORLDW/2)?-1:1;
+  S.foes={};
+  ids.forEach(function(pid,i){ if(pid!==NET.me) S.foes[pid]=makeFoe(pid,spawnX(i,ids.length)); });
+  S.foe=nearestFoe();
   S.fx=[];S.shots=[];S.beams=[];S.nums=[];S.bolt=null;S.sentries=[];
   S.combo=0;S.comboT=0;S.dealt=0;S.frames=0;S.shake=0;S.hitstop=0;
   for(var k in IN) IN[k]=0;
@@ -2871,22 +3001,24 @@ function beginDuel(map){
   if(S.hero.c.ability) document.getElementById('abLbl').textContent=S.hero.c.ability;
   refreshIcons(); elStBar.classList.toggle('on',!!S.hero.c.fly);
   setScene("fight"); syncHUD(); S.cam=camTarget();
-  callout("DUEL!",1100); S.startTime=Date.now();
+  callout(ids.length>2?"1v1v1!":"DUEL!",1100); S.startTime=Date.now();
 }
 function endDuel(won,why){
   if(S.scene==="end") return;
-  S.scene="end"; NET.ready=false; NET.foeReady=false;
+  var ffa=S.foes&&Object.keys(S.foes).length>1, place=1+aliveFoes();
+  S.scene="end"; NET.ready=false;
   sendState();
   var secs=Math.round((Date.now()-S.startTime)/1000);
-  document.getElementById('endTitle').textContent=won?"YOU WIN":"YOU LOSE";
+  var pay=won?(ffa?200:150):((ffa&&place===2)?50:0);
+  document.getElementById('endTitle').textContent=won?"YOU WIN":(ffa?(place===2?"2ND PLACE":"3RD PLACE"):"YOU LOSE");
   document.getElementById('endTitle').style.color=won?"#7bffd0":"#ff6b7d";
   document.getElementById('endLine').textContent=won
     ? (why?("Win — "+why):(S.hero.c.name+" is the last one standing."))
-    : ((S.foe?S.foe.c.name:"They")+" put you down.");
-  if(won){ CASH+=150; saveAll(); }
+    : ((S.foe?S.foe.c.name:"They")+" put you down."+(ffa&&place===3?" The other two fight on.":""));
+  if(pay){ CASH+=pay; saveAll(); }
   document.getElementById('endStat').textContent=won
-    ?"Duel won in "+secs+"s with "+Math.max(0,Math.round(S.hero.hp))+" HP left  ·  +$150  (you have $"+CASH+")"
-    :"You dealt "+S.dealt+" damage in "+secs+"s.";
+    ?(ffa?"1v1v1":"Duel")+" won in "+secs+"s with "+Math.max(0,Math.round(S.hero.hp))+" HP left  ·  +$"+pay+"  (you have $"+CASH+")"
+    :"You dealt "+S.dealt+" damage in "+secs+"s."+(pay?"  ·  +$"+pay+"  (you have $"+CASH+")":"");
   setTimeout(function(){ setScene("end"); updateShop(); },900);
   setTimeout(startTune,1400);
   if(won){ SFX.win(); flashScreen(.8); shake(12); } else SFX.lose();
@@ -3145,7 +3277,8 @@ document.getElementById('btnVs').addEventListener('click',function(){
   if(isLocked(S.pick)){ callout("UNLOCK THIS HERO FIRST",1100); return; }
   setScene("vs"); beep(700,.06,"square",.05);
 });
-document.getElementById('btnHost').addEventListener('click',function(){ hostGame(false); });
+document.getElementById('btnHost').addEventListener('click',function(){ hostGame(false,2); });
+document.getElementById('btnHost3').addEventListener('click',function(){ hostGame(false,3); });
 (function(){
   var ji=document.getElementById('joinCode');
   // keep the field tidy as they type: uppercase, and only code characters
@@ -3159,7 +3292,8 @@ document.getElementById('btnJoin').addEventListener('click',function(){
   joinGame(document.getElementById('joinCode').value);
 });
 document.getElementById('btnReady').addEventListener('click',function(){
-  NET.ready=!NET.ready; netSend({t:'ready',v:NET.ready});
+  NET.ready=!NET.ready;
+  if(NET.role==="host") lobbyBroadcast(); else netSend({t:'ready',v:NET.ready});
   beep(NET.ready?880:300,.08,"square",.06);
   updateVsUI(); tryStartDuel();
 });
@@ -3189,7 +3323,7 @@ document.getElementById('btnStart').addEventListener('click',function(){beep(660
   buildMapList(); buildBossList(); refreshCards(); updateShop(); setScene("select");});
 document.getElementById('btnGo').addEventListener('click',function(){ if(!isLocked(S.pick)) startFight(); });
 document.getElementById('btnAgain').addEventListener('click',function(){
-  if(S.mode==="pvp"){ netSend({t:'rematch'}); NET.ready=false; NET.foeReady=false; setScene("vs"); }
+  if(S.mode==="pvp"){ netSend({t:'rematch'}); backToLobby(); }
   else startFight();
 });
 document.getElementById('btnSwap').addEventListener('click',function(){
