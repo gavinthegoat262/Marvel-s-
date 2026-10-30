@@ -68,6 +68,7 @@ canvas#cv{position:absolute;inset:0;width:100%;height:100%;display:block;
 #bBlock{right:96px;bottom:84px;width:62px;height:62px;background:rgba(60,50,110,.6)}
 #bAbil{right:158px;bottom:44px;width:60px;height:60px;background:rgba(20,120,95,.62)}
 #bAbil.off{opacity:.4}
+#bDoor{right:170px;bottom:118px;width:58px;height:58px;background:rgba(160,110,30,.7)}
 #btns{width:232px}
 
 /* screens */
@@ -189,6 +190,7 @@ button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
   <div id="ctl">
     <div id="stick"><div id="knob"></div><div class="lbl">MOVE · PUSH UP TO JUMP</div></div>
     <div id="btns">
+      <button class="rb" id="bDoor" style="display:none"><span>🚪</span><em>DOOR</em></button>
       <button class="rb" id="bAbil" style="display:none"><span>✦</span><em id="abLbl">AEGIS</em></button>
       <button class="rb" id="bBlock"><span>🛡</span><em>BLOCK</em></button>
       <button class="rb" id="bJump"><span>▲</span><em id="jumpLbl">JUMP</em></button>
@@ -235,6 +237,7 @@ button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
       <button class="small" id="btnHost">HOST DUEL</button>
       <button class="small" id="btnHost3">HOST 1v1v1</button>
       <button class="small" id="btnHost4">HOST 2v2</button>
+      <button class="small" id="btnHostB">HOST CO-OP vs BOSS</button>
       <input id="joinCode" type="text" placeholder="CODE" maxlength="4" autocomplete="off"
         autocapitalize="characters" autocorrect="off" spellcheck="false">
       <button class="small" id="btnJoin">JOIN</button>
@@ -243,7 +246,7 @@ button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
       <button class="big" id="btnReady" style="display:none">READY</button>
       <button class="small" id="btnVsBack">BACK</button>
     </div>
-    <div id="vsHint" class="blurb">Host a duel (2 players), a 1v1v1 (3, last one standing) or a 2v2 (4, two teams), share the 4-letter code, and friends join with it. Works anywhere you host this file yourself.</div>
+    <div id="vsHint" class="blurb">Host a duel (2 players), a 1v1v1 (3, last one standing) a 2v2 (4, two teams) or a co-op boss fight (1–4 players vs the boss you picked, hard mode), share the 4-letter code, and friends join with it. Works anywhere you host this file yourself.</div>
   </div>
 
   <div id="crateScreen">
@@ -1274,6 +1277,7 @@ var DUN=null, TORCH=[];
 function rnd(a,b){ var s=Math.sin(a*127.1+b*311.7)*43758.5453; return s-Math.floor(s); }
 var MAPS={dungeon:{name:"DUNGEON",price:0},meadow:{name:"MEADOW",price:0},wasteland:{name:"DEAD LANDS",price:0},town:{name:"TOWN",price:0},palace:{name:"GOLDEN PALACE",price:5000}};
 function buildMap(){
+  if(S.room){ buildRoom(); return; }
   if(S.map==="meadow") buildMeadow();
   else if(S.map==="wasteland") buildWasteland();
   else if(S.map==="town") buildTown();
@@ -1747,7 +1751,8 @@ function drawBG(){
     px(t.x-1,t.y-hgt+7,2,hgt-8,"#fff0b0");
     if((S.frames+i*7)%9<4) px(t.x-1+Math.sin(f*1.7)*2,t.y-hgt-4,2,2,"#ff8a2b");
   }
-  if(S.map==="town"){
+  if(S.room) roomFx();
+  else if(S.map==="town"){
     for(var sm=0;sm<SMOKE.length;sm++){
       var sc2=SMOKE[sm];
       for(var pu=0;pu<4;pu++){
@@ -1791,6 +1796,254 @@ function drawBG(){
       }
     }
     G.globalAlpha=.30; px(0,0,WW,30,"#000"); px(0,WH-30,WW,30,"#000"); G.globalAlpha=1;
+  }
+  drawDoor(); drawAmbient();
+}
+
+/* ================= doors & rooms ================= */
+/* Every map has a door in the middle of the arena. Walking up to it and
+   pressing DOOR (or F) moves the whole fight into that map's inner room
+   until someone goes back out through the exit door. */
+var ROOMS={dungeon:"TREASURE VAULT",meadow:"CRYSTAL CAVE",wasteland:"OLD BUNKER",town:"TAVERN",palace:"THRONE ROOM"};
+var ROOMFX=[];
+function doorX(){ return Math.round(WORLDW*0.5); }
+function buildRoom(){
+  var WW=WORLDW;
+  DUN=document.createElement('canvas'); DUN.width=WW; DUN.height=WH;
+  var d=DUN.getContext('2d'); d.imageSmoothingEnabled=false;
+  var real=G; G=d; TORCH=[]; SMOKE=[]; ROOMFX=[];
+  if(S.map==="meadow") roomCave(WW);
+  else if(S.map==="wasteland") roomBunker(WW);
+  else if(S.map==="town") roomTavern(WW);
+  else if(S.map==="palace") roomThrone(WW);
+  else roomVault(WW);
+  G=real;
+}
+/* a pointed spike, for stalactites and stalagmites */
+function spike(x,y,w,h,col,down){
+  for(var i=0;i<h;i++){ var ww=Math.max(1,Math.round(w*(1-i/h)));
+    px(x-ww/2,down?y+i:y-i,ww,1,col); }
+}
+function stoneFloor(WW,a,b,c){
+  px(0,GROUND,WW,WH-GROUND,a);
+  for(var x=0;x<WW;x+=26){ var o=(((x/26)|0)%2)*13;
+    px(x,GROUND,1,WH-GROUND,c);
+    for(var y=GROUND+9;y<WH;y+=12) px(x+o,y,26,1,c); }
+  px(0,GROUND,WW,2,b);
+}
+function roomVault(WW){
+  var x,i,k;
+  px(0,0,WW,WH,"#1a120c");
+  for(var y=0;y<GROUND;y+=12){ var off=((y/12)|0)%2?14:0;
+    for(x=-28;x<WW+28;x+=28){ var v=rnd(x+off,y+7);
+      px(x+off+1,y+1,26,10,v<.3?"#2a1d12":(v<.7?"#251a10":"#2f2116"));
+      px(x+off+1,y+1,26,1,"#3a2a1a"); } }
+  for(i=0;i*150<WW+150;i++){ x=i*150+40;
+    // heavy pillars with gold bands
+    px(x-14,0,28,GROUND,"#3a2a1a"); px(x-14,0,4,GROUND,"#4d3922"); px(x+10,0,4,GROUND,"#20160c");
+    for(k=40;k<GROUND;k+=70){ px(x-16,k,32,6,"#a5822c"); px(x-16,k,32,2,"#e0c256"); }
+    TORCH.push({x:x+40,y:GROUND-120});
+    px(x+37,GROUND-118,6,10,"#4a3a22");
+    // hanging banner
+    var bx=x+80; px(bx-12,30,24,70,"#6a1420"); px(bx-12,30,24,4,"#a5822c");
+    px(bx-12,96,8,8,"#6a1420"); px(bx+4,96,8,8,"#6a1420"); disc(bx,60,6,"#e0c256");
+  }
+  stoneFloor(WW,"#2a1f16","#4a3a28","#1a120c");
+  // treasure: coin heaps and chests along the floor
+  for(i=0;i<Math.round(WW/90);i++){ x=Math.round(rnd(i,51)*WW);
+    if(Math.abs(x-doorX())<50) continue;
+    if(rnd(i,53)<.55){ var r=10+rnd(i,57)*10;
+      for(k=0;k<r;k++){ var w=Math.round((r-k)*2.2); px(x-w/2,GROUND-k,w,1,k%3?"#e0c256":"#c9a53a"); }
+      px(x-3,GROUND-r-1,3,2,"#fff0b0"); ROOMFX.push({k:"glint",x:x,y:GROUND-r});
+    } else {
+      px(x-14,GROUND-16,28,16,"#5a3a1a"); px(x-14,GROUND-16,28,3,"#7a5228");
+      px(x-15,GROUND-19,30,5,"#6a4420"); px(x-14,GROUND-9,28,2,"#a5822c"); px(x-2,GROUND-12,4,5,"#e0c256");
+    }
+  }
+}
+function roomCave(WW){
+  var x,i,k;
+  px(0,0,WW,WH,"#0b0d1a");
+  for(i=0;i<WW;i+=6){ var hgt=30+Math.round(rnd(i,3)*40); px(i,0,6,hgt,"#141831"); }
+  for(i=0;i<Math.round(WW/40);i++){ x=Math.round(rnd(i,7)*WW);
+    spike(x,20+rnd(i,9)*30,10+rnd(i,11)*14,30+rnd(i,13)*60,"#1d2240",true);
+    if(rnd(i,15)<.4) ROOMFX.push({k:"drip",x:x,y:60+rnd(i,13)*60,ph:rnd(i,17)*200}); }
+  // back wall rock bands
+  for(i=0;i<6;i++){ var ry=Math.round(GROUND*(0.25+i*0.12));
+    for(x=0;x<WW;x+=4) px(x,ry+Math.round(Math.sin(x*0.03+i)*6),4,3,i%2?"#161a33":"#12152a"); }
+  px(0,GROUND,WW,WH-GROUND,"#141729"); px(0,GROUND,WW,2,"#2a3058");
+  for(x=0;x<WW;x+=17) px(x,GROUND+4+Math.round(rnd(x,3)*10),9,2,"#1b1f38");
+  // crystal clusters that pulse with light
+  for(i=0;i<Math.round(WW/110);i++){ x=Math.round(rnd(i,21)*WW);
+    if(Math.abs(x-doorX())<50) continue;
+    var col=rnd(i,23)<.5?["#2fd6ff","#a8f2ff"]:["#b14cff","#e3a8ff"];
+    for(k=0;k<4;k++){ var cx=x-12+k*8, ch=14+Math.round(rnd(i*7+k,25)*26);
+      spike(cx,GROUND,7,ch,col[0],false); px(cx-1,GROUND-ch+4,1,ch-6,col[1]); }
+    ROOMFX.push({k:"crystal",x:x,y:GROUND-14,c:col[0]});
+  }
+  for(i=0;i<Math.round(WW/80);i++){ x=Math.round(rnd(i,31)*WW); spike(x,GROUND,8,10+rnd(i,33)*14,"#1d2240",false); }
+}
+function roomBunker(WW){
+  var x,i,k;
+  px(0,0,WW,WH,"#2a2c2e");
+  for(x=0;x<WW;x+=48){ for(var y=0;y<GROUND;y+=36){
+    px(x+1,y+1,46,34,(((x+y)/12)%3)<1?"#363a3d":"#33373a"); px(x+1,y+1,46,1,"#44494d");
+    disc(x+5,y+5,1,"#1e2022"); disc(x+43,y+5,1,"#1e2022"); } }
+  // pipes along the ceiling and walls
+  px(0,26,WW,8,"#4a4f54"); px(0,26,WW,2,"#6a7076"); px(0,40,WW,5,"#5a3a2a");
+  for(x=0;x<WW;x+=60) px(x,24,4,12,"#2a2c2e");
+  for(i=0;i*170<WW+170;i++){ x=i*170+60;
+    px(x-3,45,6,GROUND-45,"#4a4f54"); px(x-3,45,2,GROUND-45,"#6a7076");
+    ROOMFX.push({k:"lamp",x:x+50,y:60});
+    px(x+42,48,16,6,"#1e2022");
+    // warning stripes and crates
+    for(k=0;k<6;k++) px(x+20+k*10,GROUND-46,10,8,k%2?"#e0b020":"#1e1e1e");
+    if(Math.abs(x+90-doorX())>50){ px(x+80,GROUND-24,30,24,"#4a5a3a"); px(x+80,GROUND-24,30,3,"#5f7348");
+      px(x+80,GROUND-14,30,2,"#3a4a2a"); px(x+90,GROUND-30,20,6,"#4a5a3a"); }
+  }
+  px(0,GROUND,WW,WH-GROUND,"#3a3d40"); px(0,GROUND,WW,3,"#585d62");
+  for(x=0;x<WW;x+=40) px(x,GROUND,1,WH-GROUND,"#2a2c2e");
+  for(x=0;x<WW;x+=16) px(x,WH-10,8,10,(x/16)%2?"#e0b020":"#1e1e1e");
+}
+function roomTavern(WW){
+  var x,i,k;
+  px(0,0,WW,WH,"#3a2414");
+  for(x=0;x<WW;x+=14){ var v=rnd(x,5);
+    px(x,0,13,GROUND,v<.33?"#4a2e18":(v<.66?"#45291a":"#4f321c")); px(x+13,0,1,GROUND,"#2a1a0e");
+    for(k=20+Math.round(v*40);k<GROUND;k+=70) disc(x+6,k,1,"#2a1a0e"); }
+  px(0,24,WW,10,"#2a1a0e"); px(0,24,WW,2,"#5a3a1e");
+  for(x=30;x<WW;x+=140) px(x,24,8,GROUND-24,"#2a1a0e");
+  // fireplace
+  var fpx=Math.round(WW*0.18);
+  px(fpx-40,GROUND-90,80,90,"#5a5650"); px(fpx-40,GROUND-90,80,4,"#7a766e");
+  for(k=0;k<90;k+=10) for(x=0;x<80;x+=16) px(fpx-40+x+((k/10)%2?8:0),GROUND-90+k,15,9,"#4a4640");
+  px(fpx-24,GROUND-50,48,50,"#120a06"); ROOMFX.push({k:"fire",x:fpx,y:GROUND});
+  TORCH.push({x:fpx,y:GROUND-16});
+  // bar counter with bottles, barrels, lanterns
+  var bar0=Math.round(WW*0.66);
+  px(bar0,GROUND-34,170,34,"#5a3a1e"); px(bar0,GROUND-36,170,5,"#7a5228");
+  px(bar0,GROUND-80,170,4,"#5a3a1e"); px(bar0,GROUND-110,170,4,"#5a3a1e");
+  for(k=0;k<14;k++){ var bc=["#2f6a3a","#7a2a1a","#c9a53a","#3a4a7a"][k%4];
+    px(bar0+6+k*12,GROUND-96,5,16,bc); px(bar0+7+k*12,GROUND-100,3,4,bc);
+    px(bar0+6+k*12,GROUND-126,5,16,["#7a2a1a","#3a4a7a","#2f6a3a","#c9a53a"][k%4]); }
+  for(i=0;i<Math.round(WW/120);i++){ x=Math.round(rnd(i,61)*WW);
+    if(Math.abs(x-doorX())<50||Math.abs(x-fpx)<50) continue;
+    px(x-11,GROUND-26,22,26,"#6a4420"); px(x-11,GROUND-20,22,2,"#2a2a2a"); px(x-11,GROUND-8,22,2,"#2a2a2a");
+    px(x-9,GROUND-26,4,26,"#7a5228"); }
+  for(x=80;x<WW;x+=180){ px(x,34,1,30,"#2a1a0e"); TORCH.push({x:x,y:74}); px(x-4,62,9,10,"#2a1a0e"); }
+  px(0,GROUND,WW,WH-GROUND,"#4a2e18"); px(0,GROUND,WW,2,"#6a4420");
+  for(x=0;x<WW;x+=30) px(x,GROUND,1,WH-GROUND,"#2a1a0e");
+}
+function roomThrone(WW){
+  var x,i,k;
+  px(0,0,WW,WH,"#2a1e34");
+  for(x=0;x<WW;x+=8) px(x,0,8,GROUND,(x/8)%2?"#30223c":"#2c2038");
+  for(i=0;i*130<WW+130;i++){ x=i*130+30;
+    px(x-12,0,24,GROUND,"#e8e2d4"); px(x-12,0,5,GROUND,"#ffffff"); px(x+8,0,4,GROUND,"#b8b0a0");
+    px(x-16,GROUND-14,32,14,"#d8d0c0"); px(x-16,20,32,10,"#d8d0c0"); px(x-16,20,32,3,"#e0c256");
+    var bx=x+65; px(bx-11,40,22,80,"#7a1428"); px(bx-11,40,22,3,"#e0c256");
+    spike(bx,120,22,10,"#7a1428",true); disc(bx,70,5,"#e0c256");
+  }
+  // chandeliers
+  for(x=120;x<WW;x+=260){ px(x,0,1,40,"#a5822c"); px(x-24,40,48,3,"#e0c256");
+    for(k=-2;k<=2;k++) TORCH.push({x:x+k*10,y:36}); }
+  // throne at the far right, carpet down the middle
+  var tx=WW-80;
+  px(tx-24,GROUND-110,48,110,"#a5822c"); px(tx-20,GROUND-106,40,100,"#e0c256");
+  px(tx-16,GROUND-100,32,60,"#7a1428"); px(tx-28,GROUND-40,56,8,"#a5822c");
+  spike(tx,GROUND-110,48,16,"#e0c256",false); disc(tx,GROUND-112,4,"#ff4a6a");
+  px(0,GROUND,WW,WH-GROUND,"#d8d0c0");
+  for(x=0;x<WW;x+=24) for(var y=GROUND;y<WH;y+=12) px(x+(((y-GROUND)/12)%2?12:0),y,1,12,"#b8b0a0");
+  px(0,GROUND,WW,2,"#ffffff");
+  px(0,GROUND+4,WW,Math.max(6,(WH-GROUND)-12),"#8a1430"); px(0,GROUND+4,WW,2,"#e0c256");
+  ROOMFX.push({k:"sparkle"});
+}
+/* moving parts of a room: glowing crystals, flickering lamps, the fire */
+function roomFx(){
+  var f=S.frames;
+  for(var i=0;i<ROOMFX.length;i++){ var r=ROOMFX[i];
+    if(r.k==="crystal"){ G.globalAlpha=.12+Math.sin(f*0.05+i)*0.07; disc(r.x,r.y,30,r.c); G.globalAlpha=1; }
+    else if(r.k==="drip"){ var t=(f+r.ph)%160; if(t<110) px(r.x,r.y+t*1.6,2,4,"#5d7fb0"); }
+    else if(r.k==="glint"){ if((f+i*13)%90<6) px(r.x-1,r.y-2,3,3,"#ffffff"); }
+    else if(r.k==="lamp"){ var on=((f*7+i*31)%240)>12;
+      px(r.x-6,r.y-6,12,4,"#1e2022"); px(r.x-5,r.y-2,10,3,on?"#fff5c0":"#5a5a50");
+      if(on){ G.globalAlpha=.10; for(var k=0;k<6;k++) px(r.x-8-k*7,r.y+k*18,16+k*14,18,"#fff5c0"); G.globalAlpha=1; } }
+    else if(r.k==="fire"){ for(var q=0;q<5;q++){ var h=10+Math.sin(f*0.3+q*1.7)*6+q%2*6;
+      px(r.x-18+q*8,r.y-h-2,7,h,"#ff6a1a"); px(r.x-16+q*8,r.y-h+4,4,h-6,"#ffd23f"); } }
+    else if(r.k==="sparkle"){ for(var s=0;s<8;s++){ var sx=((s*173+f*0.3)%WORLDW), sy=30+((s*97+f*0.5)%(GROUND-60));
+      if((f+s*11)%40<20) px(sx,sy,2,2,"#fff0b0"); } }
+  }
+  G.globalAlpha=.30; px(0,0,WORLDW,26,"#000"); px(0,WH-26,WORLDW,26,"#000"); G.globalAlpha=1;
+}
+/* drifting particles in front of the backdrop, different for every place */
+function drawAmbient(){
+  var f=S.frames, cm=S.scene==="fight"?(S.cam||0):0, key=S.room?("room_"+S.map):S.map;
+  var n=18, col="#cfc3b0", sz=1, vy=0.25, vx=0.1, glow=false;
+  if(key==="meadow"){ col="#fff07a"; glow=true; vy=-0.08; vx=0.15; n=14; }
+  else if(key==="wasteland"){ col="#ff8a2b"; vy=-0.5; vx=0.35; n=22; sz=2; }
+  else if(key==="town"){ col="#e8a85a"; vy=0.4; vx=0.5; n=10; sz=2; }
+  else if(key==="palace"||key==="room_palace"){ col="#fff0b0"; vy=0.15; n=14; }
+  else if(key==="room_meadow"){ col="#7ae8ff"; glow=true; vy=-0.12; n=16; }
+  else if(key==="room_wasteland"){ col="#9a9a90"; vy=0.2; n=16; }
+  else if(key==="room_town"){ col="#ffb347"; vy=-0.35; vx=0.05; n=10; glow=true; }
+  for(var i=0;i<n;i++){
+    var span=WW+40, ph=i*97.3;
+    var x=cm+((i*61.7+f*vx*(1+(i%3)*0.4)+ph)%span+span)%span-20;
+    var y=((i*53.1+f*vy*(1+(i%4)*0.3)+ph)%GROUND+GROUND)%GROUND;
+    x+=Math.sin(f*0.03+i)*6;
+    if(glow){ G.globalAlpha=.25+Math.sin(f*0.08+i)*0.2; disc(x,y,3,col); G.globalAlpha=1; px(x,y,1,1,"#ffffff"); }
+    else { G.globalAlpha=.55; px(x,y,sz,sz,col); G.globalAlpha=1; }
+  }
+}
+function drawDoor(){
+  if(S.scene!=="fight") return;
+  var x=doorX(), top=GROUND-74, w=44, open=(S.doorAnim||0)>0;
+  // stone arch frame
+  px(x-w/2-8,top-10,w+16,84,"#1a1420"); px(x-w/2-6,top-8,w+12,82,"#5a5468");
+  for(var k=0;k<14;k++){ var aw=(w+12)*Math.sqrt(Math.max(0,1-Math.pow((14-k)/14,2)));
+    px(x-aw/2,top-22+k,aw,1,"#5a5468"); }
+  px(x-w/2,top,w,74,open?"#fff5c0":"#3a2414");
+  if(!open){
+    for(var p=0;p<w;p+=8) px(x-w/2+p,top,1,74,"#2a1a0e");
+    px(x-w/2,top+16,w,3,"#2a2a2a"); px(x-w/2,top+52,w,3,"#2a2a2a");
+    disc(x+w/2-7,top+38,2,"#e0c256");
+  }
+  var sign=S.room?"EXIT":ROOMS[S.map];
+  G.font="6px 'Press Start 2P',monospace"; G.textAlign="center";
+  var sw=sign.length*6+8;
+  px(x-sw/2,top-34,sw,11,"#120a06"); px(x-sw/2,top-34,sw,1,"#e0c256");
+  G.fillStyle=S.room?"#7bffd0":"#ffd23f"; G.fillText(sign,x,top-26);
+  if(nearDoor()){
+    G.globalAlpha=.25+Math.sin(S.frames*0.2)*0.12; px(x-w/2-4,top-4,w+8,82,"#ffd23f"); G.globalAlpha=1;
+    var tip=(S.room?"▲ LEAVE":"▲ ENTER")+" · DOOR / F";
+    G.fillStyle="#000"; G.fillText(tip,x+1,top-43); G.fillStyle="#fff"; G.fillText(tip,x,top-44);
+  }
+}
+function nearDoor(){
+  var h=S.hero;
+  return !!(h&&S.scene==="fight"&&h.hp>0&&h.z<6&&Math.abs(h.x-doorX())<24&&!((S.doorCd||0)>0));
+}
+var doorBtnOn=false;
+function updDoor(){
+  if(S.doorCd>0) S.doorCd--;
+  if(S.doorAnim>0) S.doorAnim--;
+  var near=nearDoor();
+  if(near!==doorBtnOn){ doorBtnOn=near; document.getElementById('bDoor').style.display=near?"":"none"; }
+  if(IN.door){ IN.door=0; if(near) useDoor(); }
+}
+function useDoor(){
+  setRoom(!S.room);
+  if(online()) netSend({t:'room',r:S.room?1:0});
+}
+function setRoom(on){
+  if(!!S.room===!!on) return;
+  S.room=on?S.map:null; S.doorCd=60; S.doorAnim=14;
+  buildMap(); flashScreen(.7); shake(3); beep(on?520:380,.12,"square",.06);
+  callout(on?ROOMS[S.map]:(MAPS[S.map]||{name:""}).name,1100);
+  /* the boss doesn't stay behind - it comes through right after you */
+  var b=S.boss;
+  if(b&&S.mode!=="pvp"&&!(S.mode==="coop"&&NET.role!=="host")){
+    var sd=(b.x>=doorX())?1:-1; b.x=Math.max(40,Math.min(WORLDW-40,doorX()+sd*130));
   }
 }
 
@@ -1953,6 +2206,7 @@ function tgtHalf(){ return (S.mode==="pvp") ? 15 : 26; }
 function tgtTop(){ return (S.mode==="pvp") ? 58 : 104; }
 function damageBoss(amount,knock,extra){
   if(S.mode==="pvp"){ pvpDamage(amount,knock,extra); return; }
+  if(S.mode==="coop"&&NET.role!=="host"){ coopHit(amount,knock,extra); return; }
   var b=S.boss; if(b.hp<=0)return;
   amount=Math.round(amount*((S.hero&&S.hero.atkMul)||1));
   b.hp-=amount; S.dealt+=amount; b.flash=10; b.knock=knock||0;
@@ -1972,7 +2226,7 @@ function damageHero(amount,knock,unblockable){
   else { h.st="hurt"; h.t=0; SFX.hurt(); spark(h.x,h.fy-30,10,"#ff6b7d",4,3); }
   h.hp-=amount; h.flash=14; h.inv=blk?14:28; h.knock=(knock||1.6)*(blk?.35:1)*-h.dir;
   S.combo=0; popNum(h.x,h.fy-60,amount,blk?"#9fd8ff":"#ff6b7d"); shake(blk?3:8);
-  if(h.hp<=0){ h.hp=0; h.st="ko"; if(S.mode==="pvp") pvpKO(); else endGame(false); }
+  if(h.hp<=0){ h.hp=0; h.st="ko"; if(S.mode==="pvp") pvpKO(); else if(S.mode==="coop") coopKO(); else endGame(false); }
 }
 function updHero(){
   var h=S.hero,c=h.c,sc=h.sc||c.sc;
@@ -2047,20 +2301,20 @@ function updHero(){
     h.x=Math.max(18,Math.min(WORLDW-18,h.x));
   }
   h.fy=GROUND-h.z;
-  if(S.map==="wasteland"&&h.hp>0&&h.z<24&&(h.x<36||h.x>WORLDW-36)){
+  if(S.map==="wasteland"&&!S.room&&h.hp>0&&h.z<24&&(h.x<36||h.x>WORLDW-36)){
     h.burn=(h.burn||0)+1;
     if(h.burn>=34){ h.burn=0;
       h.hp-=3; h.flash=6; S.combo=0;
       popNum(h.x,h.fy-58,3,"#ff9a3a"); spark(h.x,h.fy-8,5,"#ff7a1a",3,2);
       beep(240,.08,"sawtooth",.05,120);
-      if(h.hp<=0){ h.hp=0; h.st="ko"; if(S.mode==="pvp") pvpKO(); else endGame(false); }
+      if(h.hp<=0){ h.hp=0; h.st="ko"; if(S.mode==="pvp") pvpKO(); else if(S.mode==="coop") coopKO(); else endGame(false); }
     }
   } else h.burn=0;
   if(h.netSlow>0) h.netSlow--;
   if(h.netDot&&h.netDot.left>0){ h.netDot.t--;
     if(h.netDot.t<=0){ h.netDot.t=h.netDot.every; h.netDot.left--;
       h.hp-=h.netDot.dmg; h.flash=4; popNum(h.x,h.fy-56,h.netDot.dmg,"#d8f8ff");
-      if(h.hp<=0){ h.hp=0; h.st="ko"; if(S.mode==="pvp") pvpKO(); else endGame(false); } } }
+      if(h.hp<=0){ h.hp=0; h.st="ko"; if(S.mode==="pvp") pvpKO(); else if(S.mode==="coop") coopKO(); else endGame(false); } } }
   h.en=Math.min(100,h.en+0.16);
 }
 function runSpecial(h){
@@ -2148,7 +2402,7 @@ function runSpecial(h){
 
 /* ---- boss: punch + slam only ---- */
 function updBoss(){
-  var b=S.boss,h=S.hero; if(!b||!h) return;
+  var b=S.boss,h=bossAim(); if(!b||!h) return;
   if(b.flash>0)b.flash--;
   if(b.chip>Math.max(0,b.hp)/b.maxhp) b.chip-=0.004;
   if(b.hp<=0)return;
@@ -2163,6 +2417,7 @@ function updBoss(){
   }
   var rate=slowed?0.45:1;
   b.t+=rate;
+  if(b.def&&b.def.hard&&!b.rage&&b.hp<b.maxhp/2){ b.rage=1; callout(b.def.name+" IS ENRAGED!",1300); shake(8); SFX.warn(); }
   if((b.def||BOSSDEF.vorak).sentry){
     b.sentryT-=rate;
     if(b.sentryT<=0){ b.sentryT=3600; spawnSentries(); }
@@ -2201,9 +2456,9 @@ function updBoss(){
         :(kind==="bolt"?"GREEN — RUN! BLOCKING WON'T SAVE YOU":"ORANGE — JUMP THE SLAM"));
     }
   } else if(b.st==="tel"){
-    if(b.t>=b.tel.len){ b.st="act"; b.t=0; fireAttack(b.tel.kind); }
+    if(b.t>=b.tel.len){ b.st="act"; b.t=0; bossFire(b.tel.kind); }
   } else if(b.st==="act"){
-    if(b.t>26){ b.st="idle"; b.tel=null; b.t=0; b.cd=64+(Math.random()*40|0); }
+    if(b.t>26){ b.st="idle"; b.tel=null; b.t=0; b.cd=Math.round((64+(Math.random()*40|0))*bossPace(b)); }
   }
   if(b.knock){ b.x+=b.knock; b.knock*=.84; if(Math.abs(b.knock)<.15)b.knock=0; }
   b.x=Math.max(40,Math.min(WORLDW-40,b.x));
@@ -2213,7 +2468,7 @@ function fireAttack(kind){
   var b=S.boss,h=S.hero,def=b.def||BOSSDEF.vorak;
   if(kind==="bolt"){
     var tx=(b.tel&&b.tel.mark!==undefined)?b.tel.mark:h.x;
-    S.bolt={x:tx,life:26};
+    S.bolt={x:tx,life:26,boss:1};
     SFX.zap(); shake(9); flashScreen(.4);
     spark(tx,GROUND-6,24,"#6dff7a",7,4);
     if(Math.abs(h.x-tx)<34) damageHero(def.bolt,3.6,true);
@@ -2279,6 +2534,7 @@ function fireAttack(kind){
 }
 function spawnSentries(){
   var b=S.boss; if(!b) return;
+  if(S.mode==="coop"&&NET.role==="host") netSend({t:'bsent'});
   for(var i=0;i<2;i++)
     S.sentries.push({x:b.x+(i?46:-46),y:GROUND-110-i*24,hp:45,maxhp:45,t:60+i*40,
       ph:Math.random()*6,flash:0});
@@ -2529,7 +2785,7 @@ function brokerRetry(label,again){
    passes every message on to the others, and routes each 'hit' to the
    player it was aimed at. Modes: a duel holds 2, a 1v1v1 holds 3 (last
    one standing), a 2v2 holds 4 (even slots against odd slots). */
-var MODEMAX={duel:2,ffa:3,"2v2":4};
+var MODEMAX={duel:2,ffa:3,"2v2":4,coop:4};
 var NET={peer:null,conns:[],role:null,code:null,open:false,codeLive:false,
   joinTimer:null,bi:0,tries:0,ready:false,me:0,mode:"duel",max:2,players:{},sq:0,err:null};
 var FOECOL=["#ff5ad0","#5ad8ff","#ffb347","#b78cff"], ALLYCOL="#3fd16a";
@@ -2544,7 +2800,7 @@ function peerId(code){ return "laststand-v3-"+code; }
 function netAvailable(){ return (typeof Peer!=="undefined"); }
 function playerCount(){ return 1+Object.keys(NET.players).length; }
 function setMode(m){ NET.mode=MODEMAX[m]?m:"duel"; NET.max=MODEMAX[NET.mode]; }
-function teamOf(pid){ return NET.mode==="2v2"?(pid%2):pid; }
+function teamOf(pid){ return NET.mode==="2v2"?(pid%2):(NET.mode==="coop"?0:pid); }
 function isAlly(pid){ return pid!==NET.me&&teamOf(pid)===teamOf(NET.me); }
 /* send to every open link except src; the host only sends a targeted
    message to its target */
@@ -2566,7 +2822,7 @@ function lobbyBroadcast(){
   if(NET.role!=="host") return;
   var L=[{pid:0,hero:S.pick,bs:(BOOST[S.pick]||0),ready:NET.ready}];
   for(var p in NET.players){ var q=NET.players[p]; L.push({pid:+p,hero:q.hero,bs:q.bs,ready:q.ready}); }
-  netSend({t:'lobby',mode:NET.mode,list:L});
+  netSend({t:'lobby',mode:NET.mode,boss:S.bossPick,list:L});
 }
 function freeSlot(){ for(var i=1;i<NET.max;i++) if(!NET.players[i]) return i; return -1; }
 function hostConn(c){
@@ -2580,7 +2836,8 @@ function hostConn(c){
     NET.players[pid]={hero:"ironclad",bs:0,ready:false,ww:WW};
     NET.open=true; NET.tries=0;
     try{ c.send({t:'welcome',you:pid,mode:NET.mode,from:0}); }catch(e){}
-    vsLog(playerCount()<NET.max?"Player joined — waiting for "+(NET.max-playerCount())+" more…"
+    if(NET.mode==="coop") vsLog(playerCount()+" in the team — everyone press READY to start");
+    else vsLog(playerCount()<NET.max?"Player joined — waiting for "+(NET.max-playerCount())+" more…"
       :"Everyone's here! All press READY");
     lobbyBroadcast(); updateVsUI();
   });
@@ -2616,6 +2873,7 @@ function guestConn(c){
     NET.open=false; NET.players={};
     if(!NET.full) vsLog("Host disconnected");
     if(S.foes) for(var p in S.foes) foeGone(+p);
+    if(S.mode==="coop"&&S.scene==="fight") endGame(false);
     updateVsUI(); });
   c.on('error',function(e){ vsLog("Connection error"+(e&&e.type?" ("+e.type+")":"")); });
 }
@@ -2632,7 +2890,8 @@ function hostGame(keepCode,mode){
   }catch(e){ vsLog("Could not start host"); return; }
   NET.peer.on('open',function(){
     NET.codeLive=true; NET.tries=0;
-    vsLog(NET.max>2?"Waiting for "+(NET.max-1)+" friends to join…":"Waiting for a friend to join…");
+    vsLog(NET.mode==="coop"?"Friends can join with the code — or press READY to go now":
+      (NET.max>2?"Waiting for "+(NET.max-1)+" friends to join…":"Waiting for a friend to join…"));
     updateVsUI();
   });
   NET.peer.on('connection',function(c){ hostConn(c); });
@@ -2691,11 +2950,17 @@ function onNetData(d){
     vsLog("Connected! Press READY when everyone's in"); updateVsUI(); }
   else if(d.t==='full'){ NET.full=true; vsLog("That lobby is full or already fighting"); }
   else if(d.t==='lobby'){
-    setMode(d.mode); NET.players={};
+    setMode(d.mode); NET.players={}; if(d.boss&&BOSSDEF[d.boss]) NET.boss=d.boss;
     (d.list||[]).forEach(function(q){ if(q.pid===NET.me) return;
       NET.players[q.pid]={hero:CHARS[q.hero]?q.hero:"ironclad",bs:+q.bs||0,ready:!!q.ready}; });
     updateVsUI(); }
-  else if(d.t==='start'){ beginDuel(d.map,d.roster,d.w); }
+  else if(d.t==='start'){ beginDuel(d.map,d.roster,d.w,d.boss); }
+  else if(d.t==='bs'){ recvBoss(d); }
+  else if(d.t==='batk'){ recvBossAttack(d); }
+  else if(d.t==='bhit'){ hostBossHit(d); }
+  else if(d.t==='bsent'){ if(S.mode==="coop"&&NET.role!=="host"&&S.scene==="fight") spawnSentries(); }
+  else if(d.t==='bdead'){ if(S.mode==="coop"&&S.scene==="fight"){ if(S.boss) S.boss.hp=0; endGame(true); } }
+  else if(d.t==='room'){ if(S.scene==="fight") setRoom(!!d.r); }
   else if(d.t==='gone'){ foeGone(+d.pid); }
   else if(d.t==='s'){
     var f=S.foes&&S.foes[d.from]; if(!f||f.gone) return;
@@ -2751,6 +3016,8 @@ function pvpKO(){
 /* where each player starts: teams on their own side, everyone facing in */
 function spawnX(pid,ids){
   var xs;
+  if(NET.mode==="coop"){ xs=[0.2,0.28,0.36,0.44];
+    return Math.round(WORLDW*xs[Math.max(0,Math.min(3,ids.indexOf(pid)))]); }
   if(NET.mode==="2v2"){
     var mates=ids.filter(function(p){ return teamOf(p)===teamOf(pid); }).sort();
     var i=Math.max(0,mates.indexOf(pid));
@@ -2802,6 +3069,9 @@ function foeGone(pid){
   checkWin(S.mode==="pvp"&&aliveFoes()===0?(NET.max>2?"everyone else left":"opponent left"):null);
 }
 function checkWin(why){
+  if(S.mode==="coop"){
+    if(S.scene==="fight"&&S.hero&&S.hero.hp<=0&&aliveAllies()===0) endGame(false);
+    return; }
   if(S.mode!=="pvp"||S.scene!=="fight"||!S.hero) return;
   var team=(NET.mode==="2v2");
   if(aliveFoes()===0&&(S.hero.hp>0||team)) endDuel(true,why);
@@ -2815,13 +3085,14 @@ function sendState(){
 /* Projectiles and beams only did damage on the thrower's screen, so
    everyone else never saw them. Send each new one out as a picture-only
    copy; heights go relative to the ground since screens differ. */
+var BOSSSHOT={wave:1,tendril:1,cannon:1,sbolt:1};
 function sendFx(){
   var sh=[],bm=[],o={t:'fx'},i,s;
-  for(i=0;i<S.shots.length;i++){ s=S.shots[i]; if(s.rem||s.sent) continue; s.sent=1;
+  for(i=0;i<S.shots.length;i++){ s=S.shots[i]; if(s.rem||s.sent||BOSSSHOT[s.kind]) continue; s.sent=1;
     sh.push({x:Math.round(s.x),y:Math.round(s.y-GROUND),vx:s.vx,k:s.kind,l:s.life,hm:Math.round(s.home||s.x)}); }
-  for(i=0;i<S.beams.length;i++){ s=S.beams[i]; if(s.rem||s.sent) continue; s.sent=1;
+  for(i=0;i<S.beams.length;i++){ s=S.beams[i]; if(s.rem||s.sent||s.evil) continue; s.sent=1;
     bm.push({x:Math.round(s.x),y:Math.round(s.y-GROUND),dir:s.dir,l:s.life,red:s.red?1:0,ev:s.evil?1:0}); }
-  if(S.bolt&&!S.bolt.rem&&!S.bolt.sent){ S.bolt.sent=1; o.bo=Math.round(S.bolt.x); }
+  if(S.bolt&&!S.bolt.rem&&!S.bolt.sent&&!S.bolt.boss){ S.bolt.sent=1; o.bo=Math.round(S.bolt.x); }
   if(sh.length) o.sh=sh; if(bm.length) o.bm=bm;
   if(sh.length||bm.length||o.bo!=null) netSend(o);
 }
@@ -2837,6 +3108,7 @@ function recvFx(d){
 /* is a shot thrown by `own` touching one of their enemies? */
 function shotTouches(s){
   var h=S.hero;
+  if(S.mode==="coop"&&S.boss&&S.boss.hp>0&&Math.abs(s.x-S.boss.x)<30) return true;
   if(h&&h.hp>0&&teamOf(NET.me)!==teamOf(s.own)&&Math.abs(s.x-h.x)<16) return true;
   for(var p in S.foes){ var f=S.foes[p];
     if(f.hp>0&&!f.gone&&+p!==s.own&&teamOf(+p)!==teamOf(s.own)&&Math.abs(s.x-f.x)<16) return true; }
@@ -2856,6 +3128,97 @@ function updRemShot(s){
     if(s.x<12||s.x>WORLDW-12) s.vx*=-1;
   } else if(shotTouches(s)) return true;
   return s.life<=0||s.x<-20||s.x>WORLDW+20;
+}
+/* ================= co-op vs boss ================= */
+/* The host runs the boss. Everyone else gets its position a few dozen
+   times a second, plus an event each time it attacks; each player then
+   plays the attack out on their own screen and takes their own damage.
+   Hits on the boss are sent to the host, which owns its HP. */
+function online(){ return S.mode==="pvp"||S.mode==="coop"; }
+var HARDATK=["punch","slam","wave","bolt","tendril","crit","hook","bite","dive","stomp","pbeam","cannon","beam"];
+function makeCoopBoss(n){
+  var b=makeBoss(), def={}, k;
+  for(k in b.def) def[k]=b.def[k];
+  HARDATK.forEach(function(a){ if(def[a]) def[a]=Math.round(def[a]*1.3); });
+  def.hard=true; b.def=def;
+  b.hp=b.maxhp=Math.round(def.hp*(1.4+0.8*(n-1)));
+  b.x=Math.round(WORLDW*0.72);
+  return b;
+}
+/* hard bosses rest less between attacks, and less again once enraged */
+function bossPace(b){ return (b.def&&b.def.hard)?(b.rage?0.45:0.65):1; }
+/* the boss goes for whichever living player is closest */
+function bossAim(){
+  var h=S.hero; if(S.mode!=="coop"||!S.boss) return h;
+  var b=S.boss, best=(h&&h.hp>0)?h:null, bd=best?Math.abs(h.x-b.x):1e9;
+  for(var p in S.foes){ var f=S.foes[p]; if(f.hp<=0||f.gone) continue;
+    var d=Math.abs(f.x-b.x); if(d<bd){ bd=d; best=f; } }
+  return best||h;
+}
+function bossFire(kind){
+  var b=S.boss;
+  if(S.mode==="coop"&&NET.role==="host")
+    netSend({t:'batk',k:kind,mk:Math.round((b.tel&&b.tel.mark!==undefined)?b.tel.mark:b.x),x:Math.round(b.x),d:b.dir});
+  fireAttack(kind);
+}
+function coopHit(amount,knock,extra){
+  var b=S.boss; if(!b||b.hp<=0||!S.hero) return;
+  var a=Math.round(amount*(S.hero.atkMul||1));
+  var m={t:'bhit',to:0,dmg:a,knock:knock||0};
+  if(extra&&extra.slow) m.slow=extra.slow;
+  if(extra&&extra.dot) m.dot=extra.dot;
+  netSend(m);
+  S.dealt+=a; b.flash=10;
+  S.combo++; S.comboT=100; S.hero.en=Math.min(100,S.hero.en+7);
+  popNum(b.x+(Math.random()*24-12),b.fy-70,a,"#ffd23f");
+  spark(b.x-S.hero.dir*10,b.fy-56,8,"#ffd23f",5,3.2);
+  shake(4); S.hitstop=2; SFX.hit();
+}
+function hostBossHit(d){
+  var b=S.boss;
+  if(S.mode!=="coop"||NET.role!=="host"||!b||b.hp<=0||S.scene!=="fight") return;
+  var a=Math.max(1,Math.min(400,Math.round(+d.dmg||0)));
+  b.hp-=a; b.flash=10; if(d.knock) b.knock=+d.knock||0;
+  popNum(b.x+(Math.random()*24-12),b.fy-70,a,"#9fe8ff");
+  if(d.slow) b.slow=Math.max(b.slow||0,Math.min(300,+d.slow));
+  if(d.dot) b.dot={left:Math.min(10,+d.dot.n||0),every:22,t:22,dmg:Math.min(20,+d.dot.d||0)};
+  if(b.hp<=0){ b.hp=0; endGame(true); }
+}
+function sendBoss(){
+  var b=S.boss; if(!b) return;
+  NET.bq=(NET.bq||0)+1;
+  netSend({t:'bs',q:NET.bq,x:Math.round(b.x),z:Math.round(b.z||0),d:b.dir,st:b.st,bt:Math.round(b.t),
+    hp:Math.round(Math.max(0,b.hp)),mhp:b.maxhp,tk:b.tel?b.tel.kind:0,tm:b.tel?Math.round(b.tel.mark||0):0,
+    tl:b.tel?b.tel.len:0,sl:(b.slow>0)?1:0,rg:b.rage?1:0,wk:Math.round(b.walkT||0)});
+}
+function recvBoss(d){
+  var b=S.boss; if(S.mode!=="coop"||!b||NET.role==="host") return;
+  if(d.q<=(b.q||0)) return; b.q=+d.q;
+  b.tx=+d.x; b.z=+d.z||0; b.dir=+d.d||-1; b.st=d.st||"idle"; b.t=+d.bt||0;
+  b.hp=+d.hp; b.maxhp=+d.mhp||b.maxhp; b.walkT=+d.wk||0;
+  b.tel=d.tk?{kind:String(d.tk),mark:+d.tm,len:+d.tl}:null;
+  b.slow=d.sl?2:0;
+  if(d.rg&&!b.rage){ b.rage=1; callout(b.def.name+" IS ENRAGED!",1300); shake(8); }
+}
+/* a guest's copy of the boss glides toward the host's position */
+function mirrorBoss(){
+  var b=S.boss; if(!b) return;
+  if(b.tx!=null) b.x+=(b.tx-b.x)*0.4;
+  b.fy=GROUND-(b.z||0); b.t++;
+  if(b.flash>0) b.flash--;
+  if(b.chip>Math.max(0,b.hp)/b.maxhp) b.chip-=0.004;
+}
+function recvBossAttack(d){
+  var b=S.boss; if(S.mode!=="coop"||!b||NET.role==="host"||S.scene!=="fight") return;
+  b.x=b.tx=+d.x; b.dir=+d.d||-1;
+  b.tel={kind:String(d.k),mark:+d.mk,len:0}; b.st="act"; b.t=0;
+  fireAttack(String(d.k));
+}
+/* you're down; the rest of the team can still win it */
+function coopKO(){
+  sendState();
+  if(aliveAllies()>0){ callout("DOWN — YOUR TEAM FIGHTS ON",1600); return; }
+  endGame(false);
 }
 function foeBar(f){
   var w=Math.min(150,WW*(NET.max>2?0.3:0.5)), cm=(S.cam||0);
@@ -2899,10 +3262,14 @@ function updCam(){
 }
 function step(){ S.frames++;
   if(S.hitstop>0){S.hitstop--;return;}
-  if(S.mode==="pvp"&&S.foes){ for(var p in S.foes) updFoe(S.foes[p]); S.foe=nearestFoe(); }
+  if(online()&&S.foes){ for(var p in S.foes) updFoe(S.foes[p]); if(S.mode==="pvp") S.foe=nearestFoe(); }
   updHero();
-  if(S.mode==="pvp"){ sendFx(); if(S.frames%2===0) sendState(); }
-  else { updBoss(); updSentries(); }
+  if(online()){ sendFx(); if(S.frames%2===0) sendState(); }
+  if(S.mode==="coop"){
+    if(NET.role==="host"){ updBoss(); if(S.frames%2===0) sendBoss(); } else mirrorBoss();
+    updSentries();
+  } else if(S.mode!=="pvp"){ updBoss(); updSentries(); }
+  updDoor();
   updShots(); updFx(); updCam();
   if(S.shake>0)S.shake*=.82; }
 function titleCast(){
@@ -2957,10 +3324,10 @@ function render(){
   drawBG();
   if(S.scene==="title") titleCast();
   if(S.scene==="select") previewStage();
-  if(S.mode==="pvp"&&S.foes&&S.scene==="fight"){
+  if(S.mode!=="pvp"&&S.boss&&S.scene!=="title") drawBoss(S.boss);
+  if(online()&&S.foes&&S.scene==="fight"){
     for(var p in S.foes){ var f=S.foes[p]; if(!f.gone) drawHero(f); }
     for(var q in S.foes){ var g=S.foes[q]; if(g.hp>0) foeBar(g); } }
-  else if(S.boss&&S.scene!=="title") drawBoss(S.boss);
   if(S.scene==="fight"&&S.mode!=="pvp") drawSentries();
   if(S.hero&&S.scene!=="title") drawHero(S.hero);
   drawFx();
@@ -2985,7 +3352,7 @@ function resize(){
   CV.width=WW; CV.height=WH;
   G=CV.getContext('2d'); G.imageSmoothingEnabled=false;
   GROUND=WH-Math.round(Math.max(28,Math.min(118,WH*0.185)));
-  WORLDW=(S.mode==="pvp"&&PVPW)?Math.max(PVPW,WW):Math.round(WW*2.4);
+  WORLDW=(online()&&PVPW)?Math.max(PVPW,WW):Math.round(WW*2.4);
   buildMap();
   if(S.hero){ S.hero.x=Math.max(18,Math.min(WORLDW-18,S.hero.x)); S.hero.fy=GROUND-S.hero.z; }
   if(S.boss){ S.boss.x=Math.max(40,Math.min(WORLDW-40,S.boss.x)); S.boss.fy=GROUND; }
@@ -3008,7 +3375,7 @@ function setScene(n){ S.scene=n;
   if(n==="vs"){ show(scVs); updateVsUI(); } }
 function startFight(){
   if(isLocked(S.pick)) return;
-  S.mode="pve"; S.foe=null; S.foes=null;
+  S.mode="pve"; S.foe=null; S.foes=null; S.room=null;
   PVPW=0; WORLDW=Math.round(WW*2.4);
   stopTune();
   buildMap();
@@ -3028,6 +3395,8 @@ function startFight(){
   S.pj=0;
   setScene("fight"); syncHUD(); callout("FIGHT!",900); S.startTime=Date.now(); }
 function endGame(won){
+  if(S.scene==="end") return;
+  if(S.mode==="coop"&&NET.role==="host"&&won) netSend({t:'bdead'});
   S.scene="end";
   var secs=Math.round((Date.now()-S.startTime)/1000), best="";
   document.getElementById('endTitle').textContent=won?"VORAK FALLS":"YOU FALL";
@@ -3067,8 +3436,9 @@ function updateVsUI(){
   var bd=document.getElementById('vsBoard'), cb=document.getElementById('codeBox');
   var rb=document.getElementById('btnReady'), row=document.getElementById('vsRow');
   var hint=document.getElementById('vsHint');
+  var bossNm=((NET.role==="host"?BOSSDEF[S.bossPick]:BOSSDEF[NET.boss])||BOSSDEF.vorak).name;
   document.getElementById('vsTitle').textContent=!NET.role?"ONLINE PVP":
-    ({duel:"ONLINE DUEL",ffa:"ONLINE 1v1v1","2v2":"ONLINE 2v2"})[NET.mode];
+    ({duel:"ONLINE DUEL",ffa:"ONLINE 1v1v1","2v2":"ONLINE 2v2",coop:"CO-OP vs "+bossNm})[NET.mode];
   bd.innerHTML="";
   cb.textContent=(NET.code&&(NET.codeLive||NET.open))?NET.code:"";
   if(!netAvailable()){
@@ -3080,6 +3450,7 @@ function updateVsUI(){
   /* sides of the board: one slot each, or the two teams in a 2v2 */
   var sides=[];
   if(NET.role&&NET.mode==="2v2") sides=[[0,2],[1,3]];
+  else if(NET.role&&NET.mode==="coop") sides=[[0,1,2,3]];
   else for(var i=0;i<(NET.role?NET.max:2);i++) sides.push([i]);
   var team2=NET.role&&NET.mode==="2v2";
   sides.forEach(function(side,si){
@@ -3091,10 +3462,16 @@ function updateVsUI(){
       if(pid===NET.me) bd.appendChild(vsCard(S.pick,"YOU"+tn,NET.ready,BOOST[S.pick]||0));
       else if(q) bd.appendChild(vsCard(q.hero,"P"+(pid+1)+tn,q.ready,q.bs));
       else { var w=document.createElement('div'); w.className='vsCard';
-        w.innerHTML='<div class="vn">WAITING'+tn+'</div><div class="vs2">open slot</div>'; bd.appendChild(w); }
+        w.innerHTML='<div class="vn">WAITING'+tn+'</div><div class="vs2">'+(NET.mode==="coop"?"optional":"open slot")+'</div>'; bd.appendChild(w); }
     });
   });
-  rb.style.display=NET.open?"":"none";
+  if(NET.role&&NET.mode==="coop"){
+    var vb=document.createElement('div'); vb.className='vsVs'; vb.textContent="VS"; bd.appendChild(vb);
+    var bc=document.createElement('div'); bc.className='vsCard rdy'; bc.style.borderColor='#ff3b57';
+    bc.innerHTML='<div class="vn">BOSS</div><div class="vs2" style="color:#ff6b7d">'+bossNm+'</div><div class="vs2">hard mode</div>';
+    bd.appendChild(bc); }
+  var solo=(NET.role==="host"&&NET.mode==="coop"&&NET.codeLive);
+  rb.style.display=(NET.open||solo)?"":"none";
   rb.textContent=NET.ready?"READY ✓ (tap to cancel)":"READY";
   hint.style.display=NET.open?"none":"";
 }
@@ -3105,16 +3482,16 @@ function allReady(){
 }
 function tryStartDuel(){
   if(NET.role!=="host"||S.scene==="fight") return;
-  if(playerCount()<NET.max||!allReady()) return;
+  if((NET.mode!=="coop"&&playerCount()<NET.max)||!allReady()) return;
   /* the host's list of heroes is what everyone fights with, and the
      arena is sized to the widest screen so it's the same for all */
   var roster=[{pid:0,hero:S.pick,bs:(BOOST[S.pick]||0)}], ww=WW;
   for(var p in NET.players){ var q=NET.players[p];
     roster.push({pid:+p,hero:q.hero,bs:q.bs}); ww=Math.max(ww,q.ww||300); }
   var w=Math.max(900,Math.round(ww*2.4));
-  netSend({t:'start',map:S.map,roster:roster,w:w}); beginDuel(S.map,roster,w);
+  netSend({t:'start',map:S.map,roster:roster,w:w,boss:S.bossPick}); beginDuel(S.map,roster,w,S.bossPick);
 }
-function beginDuel(map,roster,w){
+function beginDuel(map,roster,w,boss){
   if(S.scene==="fight") return;
   if(map&&MAPS[map]&&(!MAPS[map].price||OWNED['map_'+map])) S.map=map;
   roster=(roster&&roster.length)?roster:[{pid:0},{pid:1}];
@@ -3123,7 +3500,9 @@ function beginDuel(map,roster,w){
     var q=NET.players[r.pid]||(NET.players[r.pid]={});
     if(r.hero) q.hero=CHARS[r.hero]?r.hero:"ironclad";
     if(r.bs!=null) q.bs=+r.bs||0; });
-  S.mode="pvp"; S.boss=null;
+  var coop=(NET.mode==="coop");
+  S.mode=coop?"coop":"pvp"; S.boss=null; S.room=null;
+  if(coop&&boss&&BOSSDEF[boss]) S.bossPick=boss;
   /* everyone's ready flag is spent once the fight starts */
   NET.ready=false; for(var p in NET.players) NET.players[p].ready=false;
   PVPW=+w||Math.round(WW*2.4); WORLDW=Math.max(PVPW,WW);
@@ -3132,7 +3511,9 @@ function beginDuel(map,roster,w){
   S.hero.x=spawnX(NET.me,ids); S.hero.dir=(S.hero.x>WORLDW/2)?-1:1;
   S.foes={};
   ids.forEach(function(pid){ if(pid!==NET.me) S.foes[pid]=makeFoe(pid,spawnX(pid,ids)); });
-  S.foe=nearestFoe();
+  if(coop){ S.hero.dir=1; for(var fp in S.foes) S.foes[fp].dir=1;
+    S.boss=makeCoopBoss(ids.length); S.foe=null; }
+  else S.foe=nearestFoe();
   S.fx=[];S.shots=[];S.beams=[];S.nums=[];S.bolt=null;S.sentries=[];
   S.combo=0;S.comboT=0;S.dealt=0;S.frames=0;S.shake=0;S.hitstop=0;
   for(var k in IN) IN[k]=0;
@@ -3145,7 +3526,8 @@ function beginDuel(map,roster,w){
   if(S.hero.c.ability) document.getElementById('abLbl').textContent=S.hero.c.ability;
   refreshIcons(); elStBar.classList.toggle('on',!!S.hero.c.fly);
   setScene("fight"); syncHUD(); S.cam=camTarget();
-  callout(({duel:"DUEL!",ffa:"1v1v1!","2v2":"2v2!"})[NET.mode]||"DUEL!",1100); S.startTime=Date.now();
+  callout(coop?(S.boss.def.name+" — TEAM UP!"):(({duel:"DUEL!",ffa:"1v1v1!","2v2":"2v2!"})[NET.mode]||"DUEL!"),1300);
+  S.startTime=Date.now();
 }
 function endDuel(won,why){
   if(S.scene==="end") return;
@@ -3428,6 +3810,7 @@ document.getElementById('btnVs').addEventListener('click',function(){
 document.getElementById('btnHost').addEventListener('click',function(){ hostGame(false,"duel"); });
 document.getElementById('btnHost3').addEventListener('click',function(){ hostGame(false,"ffa"); });
 document.getElementById('btnHost4').addEventListener('click',function(){ hostGame(false,"2v2"); });
+document.getElementById('btnHostB').addEventListener('click',function(){ hostGame(false,"coop"); });
 (function(){
   var ji=document.getElementById('joinCode');
   // keep the field tidy as they type: uppercase, and only code characters
@@ -3473,7 +3856,7 @@ document.getElementById('btnStart').addEventListener('click',function(){beep(660
   buildMapList(); buildBossList(); refreshCards(); updateShop(); setScene("select");});
 document.getElementById('btnGo').addEventListener('click',function(){ if(!isLocked(S.pick)) startFight(); });
 document.getElementById('btnAgain').addEventListener('click',function(){
-  if(S.mode==="pvp"){ netSend({t:'rematch'}); backToLobby(); }
+  if(online()){ netSend({t:'rematch'}); backToLobby(); }
   else startFight();
 });
 document.getElementById('btnSwap').addEventListener('click',function(){
@@ -3519,7 +3902,7 @@ window.addEventListener('pointerup',stickEnd);
 window.addEventListener('pointercancel',stickEnd);
 
 /* action buttons */
-[['bAtk','atk'],['bSpec','spec'],['bJump','jump'],['bBlock','block'],['bAbil','abil']].forEach(function(pair){
+[['bAtk','atk'],['bSpec','spec'],['bJump','jump'],['bBlock','block'],['bAbil','abil'],['bDoor','door']].forEach(function(pair){
   var el=document.getElementById(pair[0]), k=pair[1];
   function on(e){ e.preventDefault(); e.stopPropagation(); IN[k]=1; if(k==="jump") IN.hold=1; el.classList.add('hot');
     try{ el.setPointerCapture(e.pointerId); }catch(err){} }
@@ -3534,7 +3917,7 @@ window.addEventListener('pointercancel',stickEnd);
 
 /* keyboard */
 var KEYMAP={a:"left",arrowleft:"left",d:"right",arrowright:"right",w:"jump",arrowup:"jump"," ":"jump",e:"abil",q:"abil",
- j:"atk",z:"atk",k:"spec",x:"spec",l:"block",shift:"block",s:"block",arrowdown:"block"};
+ j:"atk",z:"atk",k:"spec",x:"spec",f:"door",l:"block",shift:"block",s:"block",arrowdown:"block"};
 /* true when the user is typing into the join-code or cheat box - game
    keybinds must stay out of the way or letters never reach the field */
 function typingInField(e){
