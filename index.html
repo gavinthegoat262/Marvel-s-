@@ -3859,6 +3859,16 @@ function tryCheat(code){
     setTimeout(function(){beep(1175,.25,"square",.07);},220);
     return true;
   }
+  if(String(code).trim()==="7777"){
+    /* every hero, every map */
+    Object.keys(CHARS).forEach(function(k){ OWNED[k]=1; });
+    Object.keys(MAPS).forEach(function(k){ if(MAPS[k].price) OWNED['map_'+k]=1; });
+    saveAll(); refreshCards(); buildMapList(); updateShop(); pickHero(S.pick);
+    callout("EVERYTHING UNLOCKED",1600);
+    beep(660,.1,"square",.07); setTimeout(function(){beep(880,.1,"square",.07);},110);
+    setTimeout(function(){beep(1320,.3,"square",.07);},220);
+    return true;
+  }
   callout("BAD CODE",800); beep(150,.2,"square",.05); return false;
 }
 document.getElementById('btnBoost').addEventListener('click',buyBoost);
