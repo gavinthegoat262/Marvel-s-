@@ -148,6 +148,15 @@ button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
 .vsCard.rdy{border-color:#3fd16a}
 .vsVs{font-size:12px;color:#ffd23f}
 #vsStatus{color:#ffd23f}
+.storybtn{background:#7a1428;border-bottom:3px solid #3a0a14;color:#ffe0e6}
+#dlg{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);width:min(640px,calc(100% - 24px));display:none;
+  gap:10px;align-items:center;background:#120c1e;border:3px solid #6a5c9e;padding:10px;z-index:60;cursor:pointer;
+  box-shadow:0 6px 0 #000}
+#dlg.on{display:flex}
+#dlgPic{width:58px;height:84px;image-rendering:pixelated;flex:0 0 auto;border:2px solid #3a3160}
+#dlgName{font-size:9px;margin-bottom:6px}
+#dlgText{font-size:9px;line-height:1.7;color:#efe9ff}
+#dlgHint{font-size:6px;color:#9b92c0;margin-top:6px;text-align:right}
 .vsbtn{background:#1d5a6e;border-bottom:3px solid #0d2c38;color:#cfefff}
 #shoprow{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
 .boostbtn{background:#7a5a12;border-bottom:3px solid #3d2c06;color:#fff3c4}
@@ -217,6 +226,7 @@ button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
       <button class="small boostbtn" id="btnBoost">BOOST</button>
       <button class="small cratebtn" id="btnCrate">CRATE · $500</button>
       <button class="small vsbtn" id="btnVs">ONLINE PVP</button>
+      <button class="small storybtn" id="btnStory">STORY MODE</button>
     </div>
     <div id="crateout"></div>
     <div id="cheatrow"><input id="cheat" type="text" inputmode="numeric" placeholder="code" maxlength="8"><button class="small" id="btnCheat">ENTER</button></div>
@@ -265,6 +275,8 @@ button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
       <button class="small" id="btnSwap">Change hero</button>
     </div>
   </div>
+  <div id="dlg"><canvas id="dlgPic" width="58" height="84"></canvas>
+    <div style="flex:1"><div id="dlgName"></div><div id="dlgText"></div><div id="dlgHint"></div></div></div>
 </div>
 
 <script>
@@ -1860,6 +1872,296 @@ function drawBG(){
   drawDoor(); drawAmbient();
 }
 
+/* ================= story mode ================= */
+/* Chapter 1: you play Ironclad; Vanguard, Goliath and Warlock fight
+   beside you under the computer's control against a hardened Vorak. */
+var CH1={
+  title:"CHAPTER 1 · THE DEAD LANDS",
+  intro:[
+    ["vanguard","The scouts were right. Vorak's camped out in the Dead Lands, and he's not hiding."],
+    ["warlock","He wants us to come. Men like that always build the stage before the show."],
+    ["goliath","Then let's wreck his stage."],
+    ["ironclad","Easy, big guy. Suit diagnostics are green, thrusters are full. I'll take point."],
+    ["vorak","Four little heroes, walking into my fire. I was starting to think you'd make me wait."],
+    ["vanguard","Spread out and watch his fists. When one of us opens him up, Ironclad hits hardest."],
+    ["ironclad","No pressure, then. Let's go to work."]],
+  outro:[
+    ["vorak","This... isn't over. The dark beyond the Dead Lands is so much bigger than me."],
+    ["warlock","He's fading. Whatever he's talking about, we haven't seen the last of it."],
+    ["goliath","Then we hit that too."],
+    ["vanguard","Good work, all of you. Ironclad — that last strike was yours."],
+    ["ironclad","Team effort. But yeah. It was a pretty great strike."]]
+};
+var STORYALLIES=[["vanguard",0.24],["goliath",0.30],["warlock",0.14]];
+var STORYCOL={vanguard:"#6c9bf0",goliath:"#79c74e",warlock:"#6dff7a",ironclad:"#ffd23f",vorak:"#d8b6f0"};
+var STORYNAME={vanguard:"VANGUARD",goliath:"GOLIATH",warlock:"WARLOCK",ironclad:"IRONCLAD",vorak:"VORAK"};
+var DLG=null;
+
+/* ---- the conversation box ---- */
+function dlgPic(cvs,id){
+  if(id==="vorak"){
+    var g=cvs.getContext('2d'); g.imageSmoothingEnabled=false;
+    g.fillStyle="#2a1030"; g.fillRect(0,0,cvs.width,cvs.height);
+    var hd=HEAD.vorak, k=Math.floor(Math.min(cvs.width/hd.w,cvs.height/hd.h));
+    g.drawImage(hd.r,Math.round((cvs.width-hd.w*k)/2),Math.round((cvs.height-hd.h*k)/2),hd.w*k,hd.h*k);
+  } else portrait(cvs,id);
+}
+function showDialog(lines,done){
+  DLG={lines:lines,i:0,done:done};
+  S.scene="dialog"; show(null);
+  hud.classList.remove('on'); ctl.classList.remove('on');
+  document.getElementById('dlg').classList.add('on');
+  dlgLine();
+}
+function dlgLine(){
+  var L=DLG.lines[DLG.i], who=L[0];
+  var nm=document.getElementById('dlgName');
+  nm.textContent=STORYNAME[who]||who; nm.style.color=STORYCOL[who]||"#fff";
+  document.getElementById('dlgText').textContent=L[1];
+  document.getElementById('dlgHint').textContent=(DLG.i<DLG.lines.length-1)?"TAP ▶":"TAP TO CONTINUE ▶";
+  dlgPic(document.getElementById('dlgPic'),who);
+  beep(who==="vorak"?180:520,.04,"square",.04);
+}
+function dlgNext(){
+  if(!DLG) return;
+  DLG.i++;
+  if(DLG.i<DLG.lines.length){ dlgLine(); return; }
+  var done=DLG.done; DLG=null;
+  document.getElementById('dlg').classList.remove('on');
+  if(done) done();
+}
+
+/* ---- starting the chapter ---- */
+function startStory(){
+  S.storyPrev={pick:S.pick,map:S.map,boss:S.bossPick};
+  S.map="wasteland"; S.room=null; buildMap();
+  stopTune();
+  showDialog(CH1.intro,startStoryFight);
+}
+function startStoryFight(){
+  var prev=S.storyPrev||{pick:S.pick,map:S.map,boss:S.bossPick};
+  S.storyPrev=prev;
+  S.pick="ironclad"; S.map="wasteland"; S.bossPick="vorak";
+  startFight();
+  S.pick=prev.pick; S.bossPick=prev.boss;
+  S.mode="story";
+  /* a hardened Vorak, built to take four heroes at once */
+  var b=S.boss, def={}, k;
+  for(k in b.def) def[k]=b.def[k];
+  def.punch=Math.round(def.punch*1.35); def.slam=Math.round(def.slam*1.35); def.wave=Math.round(def.wave*1.3);
+  def.hard=true; b.def=def; b.hp=b.maxhp=6500; b.x=Math.round(WORLDW*0.68);
+  S.allies=STORYALLIES.map(function(a){ return makeAlly(a[0],Math.round(WORLDW*a[1])); });
+  S.hero.x=Math.round(WORLDW*0.36);
+  S.says=[]; S.beats={}; S.storyT=0;
+  callout(CH1.title,1800);
+}
+function leaveStory(){
+  var prev=S.storyPrev; if(!prev) return;
+  S.pick=prev.pick; S.map=prev.map; S.bossPick=prev.boss;
+  S.storyPrev=null; S.allies=null;
+}
+function makeAlly(id,x){
+  var c=CHARS[id], sc=c.sc, mhp=Math.round(c.hp*1.6);
+  return {id:id,c:c,pal:c.pal,sc:sc,R:rigFor(sc,c.bulk),ally:true,
+    x:x,z:0,vz:0,lx:0,dir:1,fy:GROUND,hp:mhp,maxhp:mhp,st:"idle",t:0,
+    cd:40+Math.round(Math.random()*40),spCd:300+Math.round(Math.random()*240),flash:0,inv:0,knock:0,uses:0,downSaid:false};
+}
+
+/* ---- speech bubbles during the fight ---- */
+function say(who,text,dur){
+  S.says=S.says||[];
+  for(var i=S.says.length-1;i>=0;i--) if(S.says[i].who===who) S.says.splice(i,1);
+  S.says.push({who:who,text:text,life:dur||170});
+}
+function speakerOf(who){
+  if(who==="ironclad") return S.hero;
+  if(who==="vorak") return S.boss;
+  if(S.allies) for(var i=0;i<S.allies.length;i++) if(S.allies[i].id===who) return S.allies[i];
+  return null;
+}
+function drawSays(){
+  if(!S.says) return;
+  G.font="6px 'Press Start 2P',monospace"; G.textAlign="center";
+  for(var i=S.says.length-1;i>=0;i--){ var s=S.says[i];
+    if(--s.life<=0){ S.says.splice(i,1); continue; }
+    var f=speakerOf(s.who); if(!f) continue;
+    var top=(s.who==="vorak")?f.fy-BRIG.headTop-40:f.fy-(f.R?f.R.headTop:60)-28;
+    var words=s.text.split(" "), lines=[], cur="";
+    words.forEach(function(w){ if((cur+" "+w).trim().length>24){ lines.push(cur.trim()); cur=w; } else cur+=" "+w; });
+    if(cur.trim()) lines.push(cur.trim());
+    var w2=Math.max.apply(null,lines.map(function(l){ return l.length; }))*6+10, h2=lines.length*9+6;
+    var cm=S.cam||0, bx=Math.max(cm+4,Math.min(cm+WW-w2-4,Math.round(f.x-w2/2))), by=Math.round(top-h2);
+    G.globalAlpha=Math.min(1,s.life/12);
+    px(bx-1,by-1,w2+2,h2+2,"#000"); px(bx,by,w2,h2,"#f4f0ff");
+    px(Math.round(f.x)-2,by+h2,5,4,"#f4f0ff");
+    px(bx,by,3,h2,STORYCOL[s.who]||"#888");
+    G.fillStyle="#1a1428";
+    lines.forEach(function(l,li){ G.fillText(l,bx+w2/2+1,by+10+li*9); });
+    G.globalAlpha=1;
+  }
+}
+
+/* ---- the allies ---- */
+function allyHurt(a,dmg,knock){
+  if(a.hp<=0||a.inv>0) return;
+  a.hp-=Math.round(dmg*0.8); a.flash=14; a.inv=30; a.st="hurt"; a.t=0;
+  a.knock=(knock||2)*(a.x<S.boss.x?-1:1);
+  popNum(a.x,a.fy-60,Math.round(dmg*0.8),"#ff6b7d"); spark(a.x,a.fy-30,8,"#ff6b7d",4,3);
+  if(a.hp<=0){ a.hp=0; a.st="ko";
+    say(a.id,a.id==="goliath"?"Can't... get up. Finish him!":
+      a.id==="vanguard"?"I'm down — don't stop!":"My strength is spent... it's on you.",200);
+    if(S.allies.every(function(x){ return x.hp<=0; }))
+      setTimeout(function(){ if(S.mode==="story"&&S.scene==="fight") say("vorak","Just you now, little machine.",200); },1200);
+  }
+}
+/* Vorak's attacks land on allies the same way they land on you */
+function allyTakeHits(kind){
+  var b=S.boss, def=b.def; if(!S.allies) return;
+  var mark=(b.tel&&b.tel.mark!==undefined)?b.tel.mark:b.x;
+  S.allies.forEach(function(a){
+    if(a.hp<=0) return;
+    if(kind==="punch"){ var reach=b.x+b.dir*64;
+      var inX=(b.dir>0)?(a.x+12>=b.x&&a.x-12<=reach):(a.x-12<=b.x&&a.x+12>=reach);
+      if(inX&&a.z<30) allyHurt(a,def.punch,3.2); }
+    else if(kind==="slam"){ if(Math.abs(a.x-b.x)<52&&a.z<14) allyHurt(a,def.slam,7); }
+    else if(kind==="bolt"){ if(Math.abs(a.x-mark)<34) allyHurt(a,def.bolt||30,3.6); }
+    else if(kind==="stomp"){ if(Math.abs(a.x-mark)<44&&a.z<26) allyHurt(a,def.stomp||30,6); }
+  });
+}
+function allyHitBoss(a,amt,col){
+  var b=S.boss; if(!b||b.hp<=0) return;
+  b.hp-=amt; b.flash=8; S.dealt+=0;
+  popNum(b.x+(Math.random()*24-12),b.fy-80,amt,col||"#9fe8ff");
+  spark(b.x-(b.x>a.x?1:-1)*14,b.fy-56,6,col||"#9fe8ff",4,2.5);
+  if(b.hp<=0){ b.hp=0; endGame(true); }
+}
+function allySpecial(a){
+  var b=S.boss, h=S.hero; a.uses++;
+  if(a.id==="vanguard"){
+    if(a.uses%2===1&&h&&h.hp>0){ h.buff=Math.max(h.buff||0,240);
+      say("vanguard","Behind my shield, Ironclad!"); ring(h.x,h.fy-30,"#6c9bf0"); }
+    else { say("vanguard","Shield's coming your way, Vorak!");
+      allyHitBoss(a,70,"#6c9bf0"); ring(b.x,b.fy-50,"#6c9bf0"); shake(6); }
+    a.st="special"; a.t=0;
+  } else if(a.id==="goliath"){
+    say("goliath",a.uses%2?"GET. DOWN.":"My turn!");
+    a.vz=7.2; a.lx=(b.x-a.x)/42; a.leap=1; a.st="special"; a.t=0;
+  } else {
+    if(a.uses%3===2&&h&&h.hp>0&&h.hp<h.maxhp){
+      var heal=Math.min(70,h.maxhp-h.hp); h.hp+=heal;
+      say("warlock","Hold still. This will sting.");
+      popNum(h.x,h.fy-70,"+"+heal,"#6dff7a"); spark(h.x,h.fy-40,14,"#6dff7a",4,3);
+    } else {
+      say("warlock",a.uses%2?"Lightning, answer me!":"Feel the old magic.");
+      S.bolt={x:b.x,life:24}; allyHitBoss(a,85,"#6dff7a"); shake(8); flashScreen(.3); SFX.zap();
+    }
+    a.st="special"; a.t=0;
+  }
+}
+function updAlly(a){
+  var b=S.boss, c=a.c;
+  if(a.flash>0) a.flash--; if(a.inv>0) a.inv--;
+  a.t++;
+  a.vz-=0.33; a.z+=a.vz; if(a.z<=0){ a.z=0; a.vz=0;
+    if(a.leap){ a.leap=0; a.lx=0;
+      if(b&&b.hp>0&&Math.abs(b.x-a.x)<70){ allyHitBoss(a,95,"#a8ff7a"); ring(b.x,GROUND,"#79c74e"); shake(12); SFX.big(); } } }
+  if(a.lx) a.x+=a.lx;
+  if(a.knock){ a.x+=a.knock; a.knock*=.86; if(Math.abs(a.knock)<.15) a.knock=0; }
+  a.x=Math.max(18,Math.min(WORLDW-18,a.x)); a.fy=GROUND-a.z;
+  if(a.hp<=0){ a.st="ko"; return; }
+  if(!b||b.hp<=0){ a.st="idle"; return; }
+  /* jump the shockwaves */
+  for(var i=0;i<S.shots.length;i++){ var s=S.shots[i];
+    if(s.kind!=="wave") continue;
+    var gap=s.x-a.x;
+    if(a.z<1&&Math.abs(gap)<42&&gap*s.vx<0&&Math.random()<0.75) a.vz=5.6;
+    if(Math.abs(gap)<16&&a.z<18&&!(s.hitA&&s.hitA[a.id])){ s.hitA=s.hitA||{}; s.hitA[a.id]=1; allyHurt(a,b.def.wave||18,4.5); } }
+  if(a.st==="hurt"&&a.t<18) return;
+  if(a.st==="special"&&a.t<30) return;
+  if(a.st==="attack"){
+    if(a.t===c.hitFrame&&Math.abs(b.x-a.x)<(a.id==="warlock"?170:80)) allyHitBoss(a,Math.round(c.light*0.9));
+    if(a.t<c.hitFrame+12) return;
+  }
+  a.dir=(b.x>=a.x)?1:-1;
+  var dist=Math.abs(b.x-a.x), want=(a.id==="warlock")?140:(a.id==="goliath"?56:50);
+  if(a.cd>0) a.cd--; if(a.spCd>0) a.spCd--;
+  /* back off when Vorak winds up close to you */
+  if(b.st==="tel"&&dist<84&&a.id!=="goliath"){ a.x-=a.dir*c.spd*0.9; a.st="walk"; return; }
+  if(a.spCd<=0&&dist<200){ a.spCd=520+Math.round(Math.random()*300); allySpecial(a); return; }
+  if(dist>want+12){ a.x+=a.dir*c.spd*0.85; a.st="walk"; }
+  else if(dist<want-16){ a.x-=a.dir*c.spd*0.6; a.st="walk"; }
+  else if(a.cd<=0){ a.st="attack"; a.t=0; a.cd=Math.round(c.lightCd*2.2); }
+  else a.st="idle";
+}
+function allyBar(a){
+  var w=46, x=Math.round(a.x-w/2), y=Math.round(a.fy-(a.R.headTop||60)-14);
+  px(x-1,y-1,w+2,6,"#0d0716"); px(x,y,w,4,"#2a1030");
+  px(x,y,w*Math.max(0,a.hp)/a.maxhp,4,STORYCOL[a.id]||"#3fd16a");
+}
+/* the director: lines and set pieces at points in the fight */
+function storyBeats(){
+  var b=S.boss, B=S.beats, r=b.hp/b.maxhp; S.storyT++;
+  /* one line at a time: the next beat waits until the last has been read */
+  if(S.storyT-(S.lastBeat||-999)<150) return;
+  var n0=Object.keys(B).length;
+  if(S.storyT===50&&!B.a){ B.a=1; say("vanguard","Spread out! Don't let him corner anyone."); }
+  else if(S.storyT===240&&!B.b){ B.b=1; say("vorak","Come then. Show me what four fools can do."); }
+  else if(r<0.75&&!B.c){ B.c=1; say("vorak","Four of you, and still not enough."); }
+  else if(r<0.5&&!B.d){ B.d=1; say("goliath","He's getting angry. Good. So am I."); }
+  else if(r<0.25&&!B.e){ B.e=1;
+    var wl=speakerOf("warlock");
+    if(wl&&wl.hp>0){ say("warlock","I'll bind him — Ironclad, finish it!",220);
+      b.bind=200; b.st="idle"; b.tel=null; S.bolt={x:b.x,life:30}; flashScreen(.5); shake(10); SFX.zap(); }
+    else say("ironclad","No backup left. Fine — all thrusters, all power.",220);
+  }
+  if(Object.keys(B).length!==n0) S.lastBeat=S.storyT;
+}
+function updStory(){
+  if(S.mode!=="story"||!S.allies) return;
+  S.allies.forEach(updAlly);
+  if(S.boss&&S.boss.bind>0) S.boss.bind--;
+  storyBeats();
+}
+function drawStory(){
+  if(S.mode!=="story"||!S.allies||S.scene!=="fight") return;
+  S.allies.forEach(function(a){ drawHero(a); if(a.hp>0) allyBar(a); });
+  var b=S.boss;
+  if(b&&b.bind>0){ G.globalAlpha=.7;
+    for(var q=0;q<5;q++){ var yy=b.fy-20-q*18+Math.sin(S.frames*0.2+q)*3;
+      px(b.x-30,yy,60,2,"#6dff7a"); px(b.x-30+((S.frames*2+q*13)%60),yy-1,4,4,"#d8ffd8"); }
+    G.globalAlpha=1; }
+}
+/* the chapter's ending, either way */
+function storyEnd(won){
+  S.scene="end";
+  var restore=function(){ var pr=S.storyPrev; if(pr){ S.map=pr.map; } };
+  if(won){
+    SFX.win(); flashScreen(.8); shake(12);
+    setTimeout(function(){
+      showDialog(CH1.outro,function(){
+        var first=!OWNED.story1; OWNED.story1=1; if(first) CASH+=1000;
+        restore(); saveAll();
+        document.getElementById('endTitle').textContent="CHAPTER 1 COMPLETE";
+        document.getElementById('endTitle').style.color="#7bffd0";
+        document.getElementById('endLine').textContent="Vorak is beaten — for now.";
+        document.getElementById('endStat').textContent=first?"First clear bonus: +$1000  (you have $"+CASH+")":"Cleared again. Nice.";
+        document.getElementById('btnAgain').textContent="Play chapter again";
+        setScene("end"); updateShop(); startTune();
+      });
+    },1300);
+  } else {
+    SFX.lose();
+    setTimeout(function(){
+      document.getElementById('endTitle').textContent="IRONCLAD FALLS";
+      document.getElementById('endTitle').style.color="#ff6b7d";
+      document.getElementById('endLine').textContent="Vorak had "+Math.round(S.boss.hp)+" HP left.";
+      document.getElementById('endStat').textContent="Stay mobile, jump the shockwaves, and save your super for when Warlock binds him.";
+      document.getElementById('btnAgain').textContent="Retry chapter";
+      setScene("end"); startTune();
+    },900);
+  }
+}
+
 /* ================= doors & rooms ================= */
 /* Every map has a door in the middle of the arena. Walking up to it and
    pressing DOOR (or F) moves the whole fight into that map's inner room
@@ -2472,6 +2774,7 @@ function updBoss(){
   if(b.flash>0)b.flash--;
   if(b.chip>Math.max(0,b.hp)/b.maxhp) b.chip-=0.004;
   if(b.hp<=0)return;
+  if(b.bind>0){ b.st="idle"; b.tel=null; return; }
   var slowed=(b.slow>0);
   if(slowed) b.slow--;
   if(b.dot&&b.dot.left>0){
@@ -3220,7 +3523,12 @@ function makeCoopBoss(n){
 function bossPace(b){ return (b.def&&b.def.hard)?(b.rage?0.45:0.65):1; }
 /* the boss goes for whichever living player is closest */
 function bossAim(){
-  var h=S.hero; if(S.mode!=="coop"||!S.boss) return h;
+  var h=S.hero;
+  if(S.mode==="story"&&S.boss&&S.allies){
+    var sb=S.boss, pick=(h&&h.hp>0)?h:null, pd=pick?Math.abs(h.x-sb.x):1e9;
+    S.allies.forEach(function(a){ if(a.hp<=0) return; var dd=Math.abs(a.x-sb.x); if(dd<pd){ pd=dd; pick=a; } });
+    return pick||h; }
+  if(S.mode!=="coop"||!S.boss) return h;
   var b=S.boss, best=(h&&h.hp>0)?h:null, bd=best?Math.abs(h.x-b.x):1e9;
   for(var p in S.foes){ var f=S.foes[p]; if(f.hp<=0||f.gone) continue;
     var d=Math.abs(f.x-b.x); if(d<bd){ bd=d; best=f; } }
@@ -3231,6 +3539,7 @@ function bossFire(kind){
   if(S.mode==="coop"&&NET.role==="host")
     netSend({t:'batk',k:kind,mk:Math.round((b.tel&&b.tel.mark!==undefined)?b.tel.mark:b.x),x:Math.round(b.x),d:b.dir});
   fireAttack(kind);
+  if(S.mode==="story") allyTakeHits(kind);
 }
 function coopHit(amount,knock,extra){
   var b=S.boss; if(!b||b.hp<=0||!S.hero) return;
@@ -3322,8 +3631,11 @@ function foeBar(f){
 function camTarget(){
   var h=S.hero,b=TGT();
   if(!h) return 0;
-  var focus=b? (h.x*0.68+b.x*0.32) : h.x;
-  return Math.max(0,Math.min(WORLDW-WW, focus-WW/2));
+  var focus=b? (h.x*0.68+b.x*0.32) : h.x, c=focus-WW/2;
+  /* when the two of you fit on screen together, keep both in view */
+  if(b){ var lo=Math.min(h.x,b.x)-50, hi=Math.max(h.x,b.x)+50;
+    if(hi-lo<=WW) c=Math.max(hi-WW,Math.min(lo,c)); }
+  return Math.max(0,Math.min(WORLDW-WW, c));
 }
 function updCam(){
   if(S.scene!=="fight"){ S.cam=0; return; }
@@ -3339,7 +3651,7 @@ function step(){ S.frames++;
   if(S.mode==="coop"){
     if(NET.role==="host"){ updBoss(); if(S.frames%2===0) sendBoss(); } else mirrorBoss();
     updSentries();
-  } else if(S.mode!=="pvp"){ updBoss(); updSentries(); }
+  } else if(S.mode!=="pvp"){ updBoss(); updSentries(); updStory(); }
   updDoor();
   updShots(); updFx(); updCam();
   if(S.shake>0)S.shake*=.82; }
@@ -3395,13 +3707,14 @@ function render(){
   drawBG();
   if(S.scene==="title") titleCast();
   if(S.scene==="select") previewStage();
-  if(S.mode!=="pvp"&&S.boss&&S.scene!=="title") drawBoss(S.boss);
+  if(S.mode!=="pvp"&&S.boss&&S.scene!=="title"&&S.scene!=="dialog") drawBoss(S.boss);
+  drawStory();
   if(online()&&S.foes&&S.scene==="fight"){
     for(var p in S.foes){ var f=S.foes[p]; if(!f.gone) drawHero(f); }
     for(var q in S.foes){ var g=S.foes[q]; if(g.hp>0) foeBar(g); } }
   if(S.scene==="fight"&&S.mode!=="pvp") drawSentries();
-  if(S.hero&&S.scene!=="title") drawHero(S.hero);
-  drawFx();
+  if(S.hero&&S.scene!=="title"&&S.scene!=="dialog") drawHero(S.hero);
+  drawFx(); if(S.scene==="fight") drawSays();
   G.restore();
 }
 var last=0,acc=0;
@@ -3446,7 +3759,7 @@ function setScene(n){ S.scene=n;
   if(n==="vs"){ show(scVs); updateVsUI(); } }
 function startFight(){
   if(isLocked(S.pick)) return;
-  S.mode="pve"; S.foe=null; S.foes=null; S.room=null;
+  S.mode="pve"; S.foe=null; S.foes=null; S.room=null; S.allies=null; S.says=[];
   PVPW=0; WORLDW=Math.round(WW*2.4);
   stopTune();
   buildMap();
@@ -3467,6 +3780,8 @@ function startFight(){
   setScene("fight"); syncHUD(); callout("FIGHT!",900); S.startTime=Date.now(); }
 function endGame(won){
   if(S.scene==="end") return;
+  if(S.mode==="story"){ storyEnd(won); return; }
+  document.getElementById('btnAgain').textContent="Fight again";
   if(S.mode==="coop"&&NET.role==="host"&&won) netSend({t:'bdead'});
   S.scene="end";
   var secs=Math.round((Date.now()-S.startTime)/1000), best="";
@@ -3602,6 +3917,7 @@ function beginDuel(map,roster,w,boss){
 }
 function endDuel(won,why){
   if(S.scene==="end") return;
+  document.getElementById('btnAgain').textContent="Fight again";
   var ffa=(NET.mode==="ffa"), team=(NET.mode==="2v2"), place=1+aliveFoes();
   S.scene="end"; NET.ready=false;
   sendState();
@@ -3884,6 +4200,8 @@ function tryCheat(code){
   callout("BAD CODE",800); beep(150,.2,"square",.05); return false;
 }
 document.getElementById('btnBoost').addEventListener('click',buyBoost);
+document.getElementById('btnStory').addEventListener('click',function(){ beep(700,.06,"square",.05); startStory(); });
+document.getElementById('dlg').addEventListener('click',function(e){ e.preventDefault(); dlgNext(); });
 document.getElementById('btnVs').addEventListener('click',function(){
   if(isLocked(S.pick)){ callout("UNLOCK THIS HERO FIRST",1100); return; }
   setScene("vs"); announceHero(); beep(700,.06,"square",.05);
@@ -3938,9 +4256,11 @@ document.getElementById('btnStart').addEventListener('click',function(){beep(660
 document.getElementById('btnGo').addEventListener('click',function(){ if(!isLocked(S.pick)) startFight(); });
 document.getElementById('btnAgain').addEventListener('click',function(){
   if(online()){ netSend({t:'rematch'}); backToLobby(); }
+  else if(S.mode==="story") startStoryFight();
   else startFight();
 });
 document.getElementById('btnSwap').addEventListener('click',function(){
+  if(S.mode==="story"){ leaveStory(); S.mode="pve"; }
   buildMapList(); buildBossList(); refreshCards(); updateShop(); setScene("select");});
 
 /* thumbstick */
@@ -4016,10 +4336,11 @@ window.addEventListener('keydown',function(e){
     return;
   }
   var k=e.key.toLowerCase();
+  if(DLG&&(k==="enter"||k===" ")){ e.preventDefault(); dlgNext(); return; }
   if(k==="m"){ toggleSound(); return; }
   if(/^[0-9]$/.test(k)){ S.seq=((S.seq||"")+k).slice(-4); if(S.seq==="1212"&&S.scene!=="fight"){ S.seq=""; tryCheat("1212"); } }
   var m=KEYMAP[k]; if(m){ e.preventDefault(); IN[m]=1; if(m==="jump") IN.hold=1; }
-  if(k==="enter"&&S.scene!=="fight"&&S.scene!=="vs"){
+  if(k==="enter"&&S.scene!=="fight"&&S.scene!=="vs"&&S.scene!=="dialog"&&S.scene!=="end"){
     if(S.scene==="title")setScene("select"); else startFight(); }
 });
 window.addEventListener('keyup',function(e){
