@@ -1142,7 +1142,11 @@ function drawBoss(b){
   if(b.st==="walk") arm=Math.sin(b.walkT*0.13);
   if(b.st==="tel"){ lean=-2; arm=-0.9; }
   if(b.st==="act"){ lean=3; arm=1.5; }
-  var hipY=fy-BRIG.hip, shY=fy-BRIG.sh+bob, hipX=cx, shX=cx+lean*dir;
+  var lp=b.tel&&b.tel.kind==="leap", sq=0;
+  if(lp&&b.st==="tel"){ sq=Math.min(8,Math.round(b.t/4)); arm=-1.3; lean=-3; }
+  if(lp&&b.st==="act"&&(b.z||0)>2){ arm=-2.3; lean=0; }
+  if(lp&&b.st==="act"&&!((b.z||0)>2)&&b.t<16){ sq=Math.max(0,9-Math.round(b.t*0.6)); arm=2.3; lean=6; }
+  var hipY=fy-BRIG.hip+sq, shY=fy-BRIG.sh+bob+sq*1.6, hipX=cx, shX=cx+lean*dir;
 
   G.globalAlpha=.32; px(cx-30,GROUND+2,61,5,"#000"); G.globalAlpha=1;
   if(b.tel){ var col=b.tel.kind==="slam"?"#ff8a2b":(b.tel.kind==="bolt"?"#6dff7a":
@@ -1197,6 +1201,14 @@ function drawBoss(b){
     var sm=b.tel.mark;
     if((b.t%6)<4){ px(sm-22,GROUND-4,44,5,"#e8558f");
       px(sm-22,GROUND-26,4,22,"#e8558f"); px(sm+18,GROUND-26,4,22,"#e8558f"); }
+  }
+  if(lp&&b.st!=="idle"&&!(b.st==="act"&&!((b.z||0)>2))){
+    var lmk=(b.leaping&&b.leapTo!=null)?b.leapTo:b.tel.mark, pul=(S.frames%8)<4;
+    G.globalAlpha=pul?.55:.35;
+    px(lmk-70,GROUND-2,140,4,"#ff3b57"); px(lmk-52,GROUND-5,104,3,"#ff3b57"); px(lmk-30,GROUND-7,60,2,"#ff6a6a");
+    G.globalAlpha=1;
+    px(lmk-2,GROUND-26,4,14,"#ff3b57"); px(lmk-2,GROUND-10,4,4,"#ff3b57");
+    if((b.z||0)>2){ var shr=Math.max(10,40-(b.z||0)*0.25); G.globalAlpha=.35; disc(lmk,GROUND,shr,"#000"); G.globalAlpha=1; }
   }
   if(b.tel&&b.tel.kind==="bolt"){
     var mk2=b.tel.mark;
@@ -1948,8 +1960,8 @@ function startStoryFight(){
   /* a hardened Vorak, built to take four heroes at once */
   var b=S.boss, def={}, k;
   for(k in b.def) def[k]=b.def[k];
-  def.punch=Math.round(def.punch*1.35); def.slam=Math.round(def.slam*1.35); def.wave=Math.round(def.wave*1.3);
-  def.hard=true; b.def=def; b.hp=b.maxhp=6500; b.x=Math.round(WORLDW*0.68);
+  def.punch=Math.round(def.punch*1.35); def.slam=Math.round(def.slam*1.35); def.leap=Math.round(def.leap*1.35); def.wave=Math.round(def.wave*1.3);
+  def.hard=true; b.def=def; b.hp=b.maxhp=10000; b.x=Math.round(WORLDW*0.68);
   S.allies=STORYALLIES.map(function(a){ return makeAlly(a[0],Math.round(WORLDW*a[1])); });
   S.hero.x=Math.round(WORLDW*0.36);
   S.says=[]; S.beats={}; S.storyT=0;
@@ -2026,6 +2038,7 @@ function allyTakeHits(kind){
     else if(kind==="slam"){ if(Math.abs(a.x-b.x)<52&&a.z<14) allyHurt(a,def.slam,7); }
     else if(kind==="bolt"){ if(Math.abs(a.x-mark)<34) allyHurt(a,def.bolt||30,3.6); }
     else if(kind==="stomp"){ if(Math.abs(a.x-mark)<44&&a.z<26) allyHurt(a,def.stomp||30,6); }
+    else if(kind==="leapland"){ if(Math.abs(a.x-b.x)<70&&a.z<20) allyHurt(a,def.leap||46,8); }
   });
 }
 function allyHitBoss(a,amt,col){
@@ -2086,6 +2099,8 @@ function updAlly(a){
   var dist=Math.abs(b.x-a.x), want=(a.id==="goliath")?56:(a.id==="stormcall"?54:50);
   if(a.cd>0) a.cd--; if(a.spCd>0) a.spCd--;
   /* back off when Vorak winds up close to you */
+  var lm=(b.tel&&b.tel.kind==="leap")?(b.leapTo!=null&&b.leaping?b.leapTo:b.tel.mark):null;
+  if(lm!=null&&Math.abs(a.x-lm)<84){ a.x+=(a.x>=lm?1:-1)*c.spd*1.1; a.dir=(b.x>=a.x)?1:-1; a.st="walk"; return; }
   if(b.st==="tel"&&dist<84&&a.id!=="goliath"){ a.x-=a.dir*c.spd*0.9; a.st="walk"; return; }
   if(a.spCd<=0&&dist<200){ a.spCd=520+Math.round(Math.random()*300); allySpecial(a); return; }
   if(dist>want+12){ a.x+=a.dir*c.spd*0.85; a.st="walk"; }
@@ -2542,7 +2557,7 @@ function makeHero(id){ var c=CHARS[id], bs=Math.min(MAXBOOST,BOOST[id]||0);
   hp:mhp,maxhp:mhp,en:0,stam:(c.stam||0),flying:false,buff:0,abilCd:0,st:"idle",t:0,cd:0,inv:0,flash:0,spStage:0,knock:0}; }
 var BOSSDEF={
  vorak:{key:"vorak",name:"VORAK",hp:2000,head:"vorak",style:"titan",
-   punch:22,slam:34,wave:18,cape:"#1a1020",bar:"#b14cff",bar2:"#e3a8ff"},
+   punch:22,slam:34,wave:18,leap:46,cape:"#1a1020",bar:"#b14cff",bar2:"#e3a8ff"},
  malvok:{key:"malvok",name:"MALVOK",hp:1000,head:"malvok",style:"sorcerer",
    punch:30,bolt:44,cape:"#1d3a1e",bar:"#3fd16a",bar2:"#b6ffcc"},
  maw:{key:"maw",name:"MAW",hp:1500,head:"maw",style:"symbiote",
@@ -2657,7 +2672,7 @@ function updHero(){
   if(h.knock){ h.x+=h.knock; h.knock*=.86; if(Math.abs(h.knock)<.15)h.knock=0; }
   h.x=Math.max(18,Math.min(WORLDW-18,h.x));
   var b2=TGT(), sep=tgtHalf()+12*sc;
-  if(b2&&b2.hp>0&&h.z<70&&h.st!=="special"){
+  if(b2&&b2.hp>0&&h.z<70&&h.st!=="special"&&!((b2.z||0)>20)){
     var gap=h.x-b2.x;
     if(Math.abs(gap)<sep) h.x=b2.x+(gap>=0?sep:-sep);
     h.x=Math.max(18,Math.min(WORLDW-18,h.x));
@@ -2809,14 +2824,16 @@ function updBoss(){
         var rr2=Math.random();
         kind=(dist<74)?(rr2<0.55?"combo":"dive"):(rr2<0.6?"tendril":"dive");
       }
-      else kind=(dist<78)?(Math.random()<0.55?"punch":"slam"):"slam";
+      else { var rl=Math.random();
+        kind=(rl<0.28)?"leap":((dist<78)?(rl<0.64?"punch":"slam"):"slam"); }
       b.tel={kind:kind,len:(kind==="punch"?30:kind==="bolt"?44:kind==="cannon"?26:
         kind==="stomp"?40:kind==="pbeam"?46:kind==="tendril"?30:kind==="combo"?24:
-        kind==="dive"?34:38),mark:h.x};
+        kind==="dive"?34:kind==="leap"?42:38),mark:h.x};
       b.st="tel"; b.t=0; SFX.warn();
       teach(kind, kind==="tendril"?"TENDRILS — JUMP OR DUCK BETWEEN THEM"
         :kind==="dive"?"HE DIVES AND DRAGS YOU IN — RUN WIDE"
         :kind==="combo"?"THREE-HIT COMBO — BLOCK OR BACK OFF"
+        :kind==="leap"?"SKY SLAM — GET OUT OF THE RED ZONE!"
         :kind==="stomp"?"HE STOMPS WHERE YOU STAND — MOVE!"
         :kind==="pbeam"?"PURPLE BEAM — BLOCK OR DUCK OUT OF THE LINE"
         :kind==="cannon"?"JUMP OR BLOCK THE CANNONS"
@@ -2827,7 +2844,11 @@ function updBoss(){
   } else if(b.st==="tel"){
     if(b.t>=b.tel.len){ b.st="act"; b.t=0; bossFire(b.tel.kind); }
   } else if(b.st==="act"){
-    if(b.t>26){ b.st="idle"; b.tel=null; b.t=0; b.cd=Math.round((64+(Math.random()*40|0))*bossPace(b)); }
+    if(b.leaping){
+      /* airborne: arc toward the target spot, then crash down */
+      b.vz-=0.45*rate; b.z+=b.vz*rate; b.x+=b.leapVx*rate;
+      if(b.z<=0){ b.z=0; b.vz=0; b.leaping=0; b.t=0; bossFire("leapland"); }
+    } else if(b.t>26){ b.st="idle"; b.tel=null; b.t=0; b.cd=Math.round((64+(Math.random()*40|0))*bossPace(b)); }
   }
   if(b.knock){ b.x+=b.knock; b.knock*=.84; if(Math.abs(b.knock)<.15)b.knock=0; }
   b.x=Math.max(40,Math.min(WORLDW-40,b.x));
@@ -2835,6 +2856,31 @@ function updBoss(){
 }
 function fireAttack(kind){
   var b=S.boss,h=S.hero,def=b.def||BOSSDEF.vorak;
+  if(kind==="leap"){
+    SFX.big(); shake(5);
+    spark(b.x,GROUND-4,16,"#a89a80",6,3); ring(b.x,GROUND,"#d8b6f0");
+    /* a guest's boss is moved by the host's updates, not simulated here */
+    if(S.mode==="coop"&&NET.role!=="host") return;
+    var to=(b.tel&&b.tel.mark!==undefined)?b.tel.mark:h.x;
+    b.leapTo=Math.max(40,Math.min(WORLDW-40,to));
+    b.leaping=1; b.vz=9; b.leapVx=(b.leapTo-b.x)/40;
+    return;
+  }
+  if(kind==="leapland"){
+    SFX.big(); setTimeout(function(){ SFX.big(); },70);
+    shake(20); flashScreen(.55);
+    ring(b.x,GROUND,"#ff8a2b"); ring(b.x,GROUND-6,"#fff0b0");
+    spark(b.x,GROUND-4,30,"#ff8a2b",11,5); spark(b.x,GROUND-4,18,"#d8b6f0",8,4);
+    for(var rk=0;rk<14;rk++) S.fx.push({x:b.x+(Math.random()-.5)*40,y:GROUND-4,vx:(Math.random()-.5)*9,
+      vy:-3-Math.random()*6,g:.32,life:40+Math.random()*20,c:rk%3?"#6a5a48":"#a89a80",s:rk%4?3:4});
+    S.crater={x:b.x,life:260};
+    S.shots.push({x:b.x,y:GROUND-10,vx:-4.2,kind:"wave",life:150});
+    S.shots.push({x:b.x,y:GROUND-10,vx:4.2,kind:"wave",life:150});
+    S.shots.push({x:b.x,y:GROUND-10,vx:-6.6,kind:"wave",life:110});
+    S.shots.push({x:b.x,y:GROUND-10,vx:6.6,kind:"wave",life:110});
+    if(h&&h.hp>0&&Math.abs(h.x-b.x)<70&&h.z<20) damageHero(def.leap||46,8);
+    return;
+  }
   if(kind==="bolt"){
     var tx=(b.tel&&b.tel.mark!==undefined)?b.tel.mark:h.x;
     S.bolt={x:tx,life:26,boss:1};
@@ -3024,6 +3070,16 @@ function updFx(){
 }
 function drawFx(){
   var i,p;
+  if(S.crater){
+    var cr=S.crater; cr.life--;
+    if(cr.life<=0) S.crater=null;
+    else { G.globalAlpha=Math.min(1,cr.life/60)*0.85;
+      px(cr.x-44,GROUND-1,88,4,"#1a1210"); px(cr.x-30,GROUND-3,60,3,"#120c0a");
+      for(var ck=0;ck<6;ck++){ var cd=(ck%2?1:-1)*(16+ck*9);
+        px(cr.x+cd,GROUND-2-(ck%3),12,2,"#0c0806"); px(cr.x+cd*1.3,GROUND-4,6,2,"#0c0806"); }
+      if(cr.life>200&&(S.frames%4)<2) px(cr.x-20+Math.random()*40,GROUND-10-Math.random()*10,2,2,"#ffb347");
+      G.globalAlpha=1; }
+  }
   if(S.bolt){
     S.bolt.life--;
     if(S.bolt.life<=0) S.bolt=null;
@@ -3510,7 +3566,7 @@ function updRemShot(s){
    plays the attack out on their own screen and takes their own damage.
    Hits on the boss are sent to the host, which owns its HP. */
 function online(){ return S.mode==="pvp"||S.mode==="coop"; }
-var HARDATK=["punch","slam","wave","bolt","tendril","crit","hook","bite","dive","stomp","pbeam","cannon","beam"];
+var HARDATK=["punch","slam","leap","wave","bolt","tendril","crit","hook","bite","dive","stomp","pbeam","cannon","beam"];
 function makeCoopBoss(n){
   var b=makeBoss(), def={}, k;
   for(k in b.def) def[k]=b.def[k];
@@ -3760,7 +3816,7 @@ function setScene(n){ S.scene=n;
   if(n==="vs"){ show(scVs); updateVsUI(); } }
 function startFight(){
   if(isLocked(S.pick)) return;
-  S.mode="pve"; S.foe=null; S.foes=null; S.room=null; S.allies=null; S.says=[];
+  S.mode="pve"; S.foe=null; S.foes=null; S.room=null; S.allies=null; S.says=[]; S.crater=null;
   PVPW=0; WORLDW=Math.round(WW*2.4);
   stopTune();
   buildMap();
@@ -3888,7 +3944,7 @@ function beginDuel(map,roster,w,boss){
     if(r.hero) q.hero=CHARS[r.hero]?r.hero:"ironclad";
     if(r.bs!=null) q.bs=+r.bs||0; });
   var coop=(NET.mode==="coop");
-  S.mode=coop?"coop":"pvp"; S.boss=null; S.room=null;
+  S.mode=coop?"coop":"pvp"; S.boss=null; S.room=null; S.crater=null;
   if(coop&&boss&&BOSSDEF[boss]) S.bossPick=boss;
   /* everyone's ready flag is spent once the fight starts */
   NET.ready=false; for(var p in NET.players) NET.players[p].ready=false;
