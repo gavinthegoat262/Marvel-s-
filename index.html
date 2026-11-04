@@ -1879,7 +1879,7 @@ var CH1={
   title:"CHAPTER 1 · THE DEAD LANDS",
   intro:[
     ["vanguard","The scouts were right. Vorak's camped out in the Dead Lands, and he's not hiding."],
-    ["warlock","He wants us to come. Men like that always build the stage before the show."],
+    ["stormcall","He wants us to come. Feel that air? He's been brewing this storm for days."],
     ["goliath","Then let's wreck his stage."],
     ["ironclad","Easy, big guy. Suit diagnostics are green, thrusters are full. I'll take point."],
     ["vorak","Four little heroes, walking into my fire. I was starting to think you'd make me wait."],
@@ -1887,14 +1887,14 @@ var CH1={
     ["ironclad","No pressure, then. Let's go to work."]],
   outro:[
     ["vorak","This... isn't over. The dark beyond the Dead Lands is so much bigger than me."],
-    ["warlock","He's fading. Whatever he's talking about, we haven't seen the last of it."],
+    ["stormcall","The sky's clearing. Whatever he means, it's still out there waiting."],
     ["goliath","Then we hit that too."],
     ["vanguard","Good work, all of you. Ironclad — that last strike was yours."],
     ["ironclad","Team effort. But yeah. It was a pretty great strike."]]
 };
-var STORYALLIES=[["vanguard",0.24],["goliath",0.30],["warlock",0.14]];
-var STORYCOL={vanguard:"#6c9bf0",goliath:"#79c74e",warlock:"#6dff7a",ironclad:"#ffd23f",vorak:"#d8b6f0"};
-var STORYNAME={vanguard:"VANGUARD",goliath:"GOLIATH",warlock:"WARLOCK",ironclad:"IRONCLAD",vorak:"VORAK"};
+var STORYALLIES=[["vanguard",0.24],["goliath",0.30],["stormcall",0.18]];
+var STORYCOL={vanguard:"#6c9bf0",goliath:"#79c74e",stormcall:"#9fe8ff",ironclad:"#ffd23f",vorak:"#d8b6f0"};
+var STORYNAME={vanguard:"VANGUARD",goliath:"GOLIATH",stormcall:"STORMCALL",ironclad:"IRONCLAD",vorak:"VORAK"};
 var DLG=null;
 
 /* ---- the conversation box ---- */
@@ -2009,7 +2009,7 @@ function allyHurt(a,dmg,knock){
   popNum(a.x,a.fy-60,Math.round(dmg*0.8),"#ff6b7d"); spark(a.x,a.fy-30,8,"#ff6b7d",4,3);
   if(a.hp<=0){ a.hp=0; a.st="ko";
     say(a.id,a.id==="goliath"?"Can't... get up. Finish him!":
-      a.id==="vanguard"?"I'm down — don't stop!":"My strength is spent... it's on you.",200);
+      a.id==="vanguard"?"I'm down — don't stop!":"The storm's gone quiet... it's on you.",200);
     if(S.allies.every(function(x){ return x.hp<=0; }))
       setTimeout(function(){ if(S.mode==="story"&&S.scene==="fight") say("vorak","Just you now, little machine.",200); },1200);
   }
@@ -2047,13 +2047,13 @@ function allySpecial(a){
     say("goliath",a.uses%2?"GET. DOWN.":"My turn!");
     a.vz=7.2; a.lx=(b.x-a.x)/42; a.leap=1; a.st="special"; a.t=0;
   } else {
-    if(a.uses%3===2&&h&&h.hp>0&&h.hp<h.maxhp){
-      var heal=Math.min(70,h.maxhp-h.hp); h.hp+=heal;
-      say("warlock","Hold still. This will sting.");
-      popNum(h.x,h.fy-70,"+"+heal,"#6dff7a"); spark(h.x,h.fy-40,14,"#6dff7a",4,3);
+    if(a.uses%3===2){
+      say("stormcall","THUNDERCLAP! Back off him!");
+      allyHitBoss(a,55,"#9fe8ff"); b.knock=(b.x>=a.x?1:-1)*9; ring(a.x+a.dir*30,a.fy-30,"#9fe8ff");
+      shake(10); SFX.big();
     } else {
-      say("warlock",a.uses%2?"Lightning, answer me!":"Feel the old magic.");
-      S.bolt={x:b.x,life:24}; allyHitBoss(a,85,"#6dff7a"); shake(8); flashScreen(.3); SFX.zap();
+      say("stormcall",a.uses%2?"Storm, strike him down!":"Here comes the lightning!");
+      S.bolt={x:b.x,life:24,blue:1}; allyHitBoss(a,85,"#9fe8ff"); shake(8); flashScreen(.3); SFX.zap();
     }
     a.st="special"; a.t=0;
   }
@@ -2079,11 +2079,11 @@ function updAlly(a){
   if(a.st==="hurt"&&a.t<18) return;
   if(a.st==="special"&&a.t<30) return;
   if(a.st==="attack"){
-    if(a.t===c.hitFrame&&Math.abs(b.x-a.x)<(a.id==="warlock"?170:80)) allyHitBoss(a,Math.round(c.light*0.9));
+    if(a.t===c.hitFrame&&Math.abs(b.x-a.x)<80) allyHitBoss(a,Math.round(c.light*0.9));
     if(a.t<c.hitFrame+12) return;
   }
   a.dir=(b.x>=a.x)?1:-1;
-  var dist=Math.abs(b.x-a.x), want=(a.id==="warlock")?140:(a.id==="goliath"?56:50);
+  var dist=Math.abs(b.x-a.x), want=(a.id==="goliath")?56:(a.id==="stormcall"?54:50);
   if(a.cd>0) a.cd--; if(a.spCd>0) a.spCd--;
   /* back off when Vorak winds up close to you */
   if(b.st==="tel"&&dist<84&&a.id!=="goliath"){ a.x-=a.dir*c.spd*0.9; a.st="walk"; return; }
@@ -2109,9 +2109,9 @@ function storyBeats(){
   else if(r<0.75&&!B.c){ B.c=1; say("vorak","Four of you, and still not enough."); }
   else if(r<0.5&&!B.d){ B.d=1; say("goliath","He's getting angry. Good. So am I."); }
   else if(r<0.25&&!B.e){ B.e=1;
-    var wl=speakerOf("warlock");
-    if(wl&&wl.hp>0){ say("warlock","I'll bind him — Ironclad, finish it!",220);
-      b.bind=200; b.st="idle"; b.tel=null; S.bolt={x:b.x,life:30}; flashScreen(.5); shake(10); SFX.zap(); }
+    var sc2=speakerOf("stormcall");
+    if(sc2&&sc2.hp>0){ say("stormcall","I'll pin him with the storm — Ironclad, finish it!",220);
+      b.bind=200; b.st="idle"; b.tel=null; S.bolt={x:b.x,life:30,blue:1}; flashScreen(.5); shake(10); SFX.zap(); }
     else say("ironclad","No backup left. Fine — all thrusters, all power.",220);
   }
   if(Object.keys(B).length!==n0) S.lastBeat=S.storyT;
@@ -2128,7 +2128,7 @@ function drawStory(){
   var b=S.boss;
   if(b&&b.bind>0){ G.globalAlpha=.7;
     for(var q=0;q<5;q++){ var yy=b.fy-20-q*18+Math.sin(S.frames*0.2+q)*3;
-      px(b.x-30,yy,60,2,"#6dff7a"); px(b.x-30+((S.frames*2+q*13)%60),yy-1,4,4,"#d8ffd8"); }
+      px(b.x-30,yy,60,2,"#9fe8ff"); px(b.x-30+((S.frames*2+q*13)%60),yy-1,4,4,"#ffffff"); }
     G.globalAlpha=1; }
 }
 /* the chapter's ending, either way */
@@ -2155,7 +2155,7 @@ function storyEnd(won){
       document.getElementById('endTitle').textContent="IRONCLAD FALLS";
       document.getElementById('endTitle').style.color="#ff6b7d";
       document.getElementById('endLine').textContent="Vorak had "+Math.round(S.boss.hp)+" HP left.";
-      document.getElementById('endStat').textContent="Stay mobile, jump the shockwaves, and save your super for when Warlock binds him.";
+      document.getElementById('endStat').textContent="Stay mobile, jump the shockwaves, and save your super for when Stormcall pins him.";
       document.getElementById('btnAgain').textContent="Retry chapter";
       setScene("end"); startTune();
     },900);
@@ -3031,9 +3031,10 @@ function drawFx(){
       var bx=S.bolt.x;
       for(var by=0;by<GROUND;by+=10){
         var jit=((by*13)%11)-5;
-        px(bx+jit-4,by,9,11,"#2f9c45"); px(bx+jit-2,by,5,11,"#6dff7a"); px(bx+jit-1,by,2,11,"#eaffe8");
+        var bl=S.bolt.blue;
+        px(bx+jit-4,by,9,11,bl?"#2a6ab0":"#2f9c45"); px(bx+jit-2,by,5,11,bl?"#9fe8ff":"#6dff7a"); px(bx+jit-1,by,2,11,bl?"#ffffff":"#eaffe8");
       }
-      disc(bx,GROUND-2,18,"rgba(109,255,122,0.4)");
+      disc(bx,GROUND-2,18,S.bolt.blue?"rgba(159,232,255,0.4)":"rgba(109,255,122,0.4)");
     }
   }
   for(i=0;i<S.fx.length;i++){ p=S.fx[i];
