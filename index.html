@@ -351,24 +351,21 @@ vanguard:[
 "...1aaaaa1...",
 "....11111...."],
 bastion:[
-"..6.............6..",
-"..66...........66..",
-"...66.........66...",
-"...6611111111166...",
-"..133333333333331..",
-".13444444444444431.",
-"1349669966699669431",
+"......1111111......",
+"....113333333311...",
+"...13344444443331..",
+"..1334444433333331.",
+".133333333333333331",
 "1333333333333333331",
-"1322222222222222231",
-"1211111111111111121",
-"1216777777777776121",
-"1211111111111111121",
+"1111111111111111111",
+"1677777777777777761",
+"1666666666666666661",
+"1111111111111111111",
 "1333333333333333331",
-"1323232323232323231",
-"1323232323232323231",
-"1333333333333333331",
-".12222222222222221.",
-"..111111111111111.."],
+"1322333333333332231",
+".132222222222222231",
+"..13333333333333331",
+"...1111111111111111"],
 goliath:[
 "...11111111111111..",
 "..1555655555565551.",
@@ -651,7 +648,7 @@ titan:{
  legPal:{o:"#141008",d:"#2f2413",m:"#4a3a22",l:"#66502f"}},
 bastion:{
  name:"BASTION MK-X", bossSize:true, rar:"mythic", boostPrice:30000, sc:1.7, bulk:1.35, locked:true, price:40000,
- tag:"A walking fortress that fights with twin blades.",
+ tag:"Next-gen battle armour with twin energy blades.",
  hp:520, spd:1.3, light:34, lightRange:58, lightCd:28, hitFrame:9, fly:true, stam:70,
  sp:"CROSS SLASH", spDmg:96, spCost:60, guard:.30,
  ability:"FORTRESS", abilCd:1800, abilDur:300,
@@ -949,6 +946,10 @@ function drawTorso(f,shX,shY,hipX,hipY,dir,p,R,sc){
   } else if(id==="bastion"){
     var cw=Math.round(topW*0.64), cy=shY+3, chg2=(f.st==="special");
     px(shX-cw/2,cy,cw,(hipY-shY)-8,CC(p.d)); px(shX-cw/2,cy,cw,2,CC(p.l));
+    /* glow lines running down the plate into the core */
+    var gl=(S.frames%40<20)?"#ffd400":"#ffe866";
+    px(shX-cw/2+2,cy+3,1,(hipY-shY)-13,CC(gl)); px(shX+cw/2-3,cy+3,1,(hipY-shY)-13,CC(gl));
+    px(shX-cw/2+2,cy+3,cw-4,1,CC(gl));
     px(ex-4*sc,ey-4*sc,8*sc,8*sc,CC(p.o));
     px(ex-3*sc,ey-3*sc,6*sc,6*sc,CC(chg2?"#ffffff":"#ffd400"));
     if(chg2){ G.globalAlpha=.3; disc(ex,ey,10*sc,"#ffd400"); G.globalAlpha=1; }
