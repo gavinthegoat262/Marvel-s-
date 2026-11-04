@@ -660,12 +660,12 @@ titan:{
  legPal:{o:"#141008",d:"#2f2413",m:"#4a3a22",l:"#66502f"}},
 bastion:{
  name:"BASTION MK-X", bossSize:true, rar:"mythic", boostPrice:30000, sc:1.7, bulk:1.35, locked:true, price:40000,
- tag:"Next-gen battle armour with twin energy blades.",
- hp:520, spd:1.3, light:34, lightRange:58, lightCd:28, hitFrame:9, fly:true, stam:70,
- sp:"CROSS SLASH", spDmg:96, spCost:60, guard:.30,
+ tag:"Next-gen battle armour with shock gauntlets.",
+ hp:520, spd:1.35, light:24, lightRange:50, lightCd:18, hitFrame:6, fly:true, stam:70,
+ sp:"ROCKET UPPERCUT", spDmg:95, spCost:60, guard:.30,
  ability:"FORTRESS", abilCd:1800, abilDur:300,
- atkLbl:"SLASH", spLbl:"CROSS",
- note:"520 HP of armour and twin blades. Slash 34, CROSS SLASH fires two blade waves for 48 each, rocket-boot hover, and FORTRESS cuts damage 70% for 5s.",
+ atkLbl:"JAB", spLbl:"UPPER",
+ note:"520 HP of armour and shock gauntlets. Jab, jab, SHOCK PUNCH combo (24, 24, 40), a ROCKET UPPERCUT for 95, rocket-boot hover, and FORTRESS cuts damage 70% for 5s.",
  pal:{o:"#140808",d:"#7a1414",m:"#c42020",l:"#e85040",a1:"#b89400",a2:"#ffd400",g:"#fff6a0"},
  legPal:{o:"#100c0c",d:"#2c2626",m:"#463c3c",l:"#6a5c5c"}},
 goliath:{
@@ -753,7 +753,7 @@ function heroPose(f){
         if(k<hf){ P.aa=[-1.5,0.9]; P.ab=[0.3,0.3]; P.lean=-2; }
         else { P.aa=[1.35,0.25]; P.ab=[0.9,0.3]; P.lean=3; }
       }
-    } else if(f.id==="maw"){
+    } else if(f.id==="maw"||f.id==="bastion"){
       var cy=(f.cyc||0);
       if(k<hf){ P.aa=[-1.4+cy*0.2,1.0]; P.ab=[0.4,0.3]; P.lean=-2; }
       else if(cy===2){ P.aa=[1.2,0.5]; P.ab=[1.1,0.5]; P.lean=4; }
@@ -811,7 +811,7 @@ function drawHero(f){
   mlimb(bX,aY,eb.x,eb.y,R.aw*(bare?1.5:1.12),R.aw*0.74,bul,p,true);
   mlimb(eb.x,eb.y,hb.x,hb.y,R.fw*1.14,R.fw*0.72,bul*0.6,p,true);
   disc(hb.x,hb.y,(bare?3.6:2.4)*sc,CC(p.d));
-  if(f.id==="bastion") bladeAt(f,hb,dir,sc,true);
+  if(f.id==="bastion") shockFist(f,hb,dir,sc,true);
 
   drawTorso(f,shX,shY,hipX,hipY,dir,p,R,sc);
   var lift=(c.headLift||0)*sc;
@@ -1052,27 +1052,25 @@ function drawTorso(f,shX,shY,hipX,hipY,dir,p,R,sc){
     px(ex-1,abTop,2,rows*rowH,CC(p.d));
   }
 }
-/* BASTION's sword: raised while idle, swung level on the hit, with a slash arc */
-function bladeAt(f,hand,dir,sc,back){
-  var swing=(f.st==="attack"&&f.t>=f.c.hitFrame)||(f.st==="special"&&f.t>=8);
-  var ang=back?-1.15:(swing?-0.1:-0.95);
-  var len=26*sc, ca=Math.cos(ang), sa=Math.sin(ang);
-  var tx=hand.x+dir*ca*len, ty=hand.y+sa*len;
-  stroke(hand.x,hand.y,tx,ty,4*sc,CC("#140808"));
-  stroke(hand.x,hand.y,tx,ty,2.6*sc,CC("#dfe6ee"));
-  stroke(hand.x+dir*ca*4,hand.y+sa*4,tx,ty,1,CC("#ffffff"));
-  stroke(hand.x-dir*sa*5*sc,hand.y+ca*5*sc,hand.x+dir*sa*5*sc,hand.y-ca*5*sc,2.4*sc,CC("#ffd400"));
-  disc(hand.x,hand.y,2.4*sc,CC("#7a1414"));
-  if(!back&&f.st==="attack"&&f.t>=f.c.hitFrame&&f.t<f.c.hitFrame+5){
-    G.globalAlpha=.75;
-    for(var a=-1.1;a<=0.5;a+=0.12)
-      px(hand.x+dir*Math.cos(a)*len*1.05,hand.y+Math.sin(a)*len*1.05,3,3,a>0?"#ffffff":"#ffd400");
-    G.globalAlpha=1;
+/* BASTION's shock gauntlets: armoured fists wrapped in yellow energy coils
+   that crackle on every hit, and burst on the third punch of the combo */
+function shockFist(f,hand,dir,sc,back){
+  var r=(back?3.2:3.8)*sc, hot=!back&&f.st==="attack"&&f.t>=f.c.hitFrame&&f.t<f.c.hitFrame+5;
+  disc(hand.x,hand.y,r+1,CC("#140808")); disc(hand.x,hand.y,r,CC("#7a1414"));
+  disc(hand.x-dir,hand.y-1,r*0.55,CC("#c42020"));
+  px(hand.x-r,hand.y-1,r*2,2,CC("#ffd400")); px(hand.x-1-dir*r*0.6,hand.y-r,2,r*2,CC("#ffd400"));
+  if(back) return;
+  if((S.frames%10)<5) px(hand.x+dir*r,hand.y-r-1,2,2,"#fff6a0");
+  if(hot||(f.st==="special"&&f.t>=10&&f.t<20)){
+    var big=(f.cyc===2)||f.st==="special";
+    for(var z=0;z<(big?9:5);z++){ var ax=hand.x+dir*(r+Math.random()*(big?18:10)), ay=hand.y+(Math.random()-.5)*(big?22:12);
+      px(ax,ay,2,2,z%2?"#ffffff":"#ffd400"); }
+    G.globalAlpha=big?.45:.3; disc(hand.x+dir*r,hand.y,big?10*sc:6*sc,"#ffd400"); G.globalAlpha=1;
   }
 }
 function gear(f,hand,dir,p,sc){
   var st=f.st,id=f.id;
-  if(id==="bastion") bladeAt(f,hand,dir,sc,false);
+  if(id==="bastion") shockFist(f,hand,dir,sc,false);
   if(id==="vanguard"&&st!=="special"){
     disc(hand.x,hand.y,11,CC("#0b0e1c")); disc(hand.x,hand.y,10,CC("#dfe6f5"));
     disc(hand.x,hand.y,8,CC("#2f5bd0")); disc(hand.x,hand.y,6,CC("#dfe6f5"));
@@ -2634,7 +2632,7 @@ function updHero(){
     }
     if(IN.atk&&h.cd===0&&!IN.block){ h.st="attack"; h.t=0; h.cd=c.lightCd;
       if(h.id==="nightclaw") h.kick=!h.kick;
-      if(h.id==="maw") h.cyc=((h.cyc||0)+1)%3; }
+      if(h.id==="maw"||h.id==="bastion") h.cyc=((h.cyc||0)+1)%3; }
     else if(IN.spec&&h.en>=c.spCost&&!IN.block){ h.st="special"; h.t=0; h.spStage=0;
       h.en-=c.spCost; callout(c.sp,800); SFX.zap(); }
   }
@@ -2668,7 +2666,9 @@ function updHero(){
         var dmgL=c.light+(S.combo>=6?4:0);
         if(h.id==="nightclaw"&&h.kick) dmgL+=5;
         if(h.id==="maw"&&h.cyc===2) dmgL+=8;
-        if(inX&&h.z<tgtTop()-12&&b.hp>0) damageBoss(dmgL,(h.id==="nightclaw"&&h.kick)?1.8:1);
+        var shock=(h.id==="bastion"&&h.cyc===2); if(shock) dmgL+=16;
+        if(inX&&h.z<tgtTop()-12&&b.hp>0){ damageBoss(dmgL,(h.id==="nightclaw"&&h.kick)?1.8:(shock?3:1));
+          if(shock){ shake(7); spark(b.x,b.fy-50,12,"#ffd400",6,3); ring(b.x,b.fy-40,"#ffd400"); } }
         else spark(h.x+h.dir*28*sc,h.fy-34*sc,4,"#6a5c99",2.5,1.8);
       }
     }
@@ -2771,11 +2771,15 @@ function runSpecial(h){
     }
     if(t>44){h.st="idle";h.t=0;}
   } else if(h.id==="bastion"){
-    if(t===10||t===18){ var bsc=h.sc||h.c.sc, up=(t===10);
-      S.shots.push({x:h.x+h.dir*20*bsc,y:h.fy-(up?44:28)*bsc,vx:h.dir*6.6,kind:"slash",
-        dmg:Math.round(h.c.spDmg/2),life:120,up:up});
-      SFX.zap(); shake(5); spark(h.x+h.dir*24*bsc,h.fy-36*bsc,8,"#ffd400",4,2.5); }
-    if(t>32){h.st="idle";h.t=0;}
+    var usc=h.sc||h.c.sc;
+    if(t>=4&&t<14){ h.x+=h.dir*5; h.x=Math.max(18,Math.min(WORLDW-18,h.x));
+      spark(h.x-h.dir*12*usc,h.fy-6,2,"#ff8a1a",2,1); }
+    if(t===12){ h.vz=6.5; SFX.big(); }
+    if(t>=12&&h.spStage===0&&b.hp>0&&Math.abs(b.x-h.x)<64*usc/1.7){
+      h.spStage=1; damageBoss(h.c.spDmg,5); shake(13); flashScreen(.35);
+      ring(b.x,b.fy-60,"#ffd400"); spark(b.x,b.fy-70,20,"#ffd400",8,5); }
+    if(t>=12&&t<26) spark(h.x,h.fy+2,2,"#ffb347",2,1);
+    if(t>36){h.st="idle";h.t=0;h.spStage=0;}
   } else if(h.id==="weaver"){
     if(t===10){ S.shots.push({x:h.x+h.dir*18,y:h.fy-38,vx:h.dir*6.2,kind:"webbig",dmg:h.c.spDmg,life:160});
       SFX.zap(); shake(4); }
@@ -3039,7 +3043,7 @@ function updShots(){
       if(b.hp>0&&Math.abs(s.x-b.x)<TWb+4&&s.hits<3){ s.hits++; damageBoss(h.c.spDmg,.6);
         s.vx*=-1; s.x+=s.vx*4; if(s.hits>=3){S.shots.splice(i,1);continue;} }
       if(s.x<12||s.x>WORLDW-12) s.vx*=-1;
-    } else if(s.kind==="plasma"||s.kind==="slash"){
+    } else if(s.kind==="plasma"){
       if(hitSentries(s.x,20,s.dmg)){ S.shots.splice(i,1); continue; }
       if(b.hp>0&&Math.abs(s.x-b.x)<TWb+2&&s.y>b.fy-THb&&s.y<b.fy){
         damageBoss(s.dmg+(S.combo>=6?4:0),.8); S.shots.splice(i,1); continue; }
@@ -3159,11 +3163,6 @@ function drawFx(){
     } else if(s.kind==="quake"){
       px(s.x-8,GROUND-18,16,18,"#a5822c"); px(s.x-6,GROUND-16,12,16,"#e0c256");
       px(s.x-3,GROUND-24,6,8,"#fff0b0");
-    } else if(s.kind==="slash"){
-      var sd=s.vx>0?1:-1;
-      for(var sq=-12;sq<=12;sq++){ var bend=Math.round((144-sq*sq)/18);
-        px(s.x+sd*bend-(sd>0?3:0),s.y+sq,3,1,Math.abs(sq)<8?"#ffffff":"#ffd400");
-        px(s.x+sd*bend-(sd>0?6:-3),s.y+sq,3,1,"#c42020"); }
     } else if(s.kind==="plasma"){
       px(s.x-(s.vx>0?14:0),s.y-2,14,4,"#ff8a2b");
       disc(s.x,s.y,5,"#ff6a1a"); disc(s.x,s.y,3,"#ffd23f"); disc(s.x,s.y,1,"#fffbe0");
