@@ -605,7 +605,7 @@ weaver:{
  hp:250, spd:2.2, light:15, lightCd:22, hitFrame:5, ranged:true, shot:"web",
  sp:"WEB CANNON", spDmg:62, spCost:50, guard:.28,
  atkLbl:"WEB", spLbl:"CANNON",
- note:"Webs stick to Vorak — they slow him hard and keep eating his health after they land.",
+ note:"Webs stick to Vorak — they slow him hard and keep eating his health after they land. In the air, press JUMP near a branch, ring or beam to swing; LEFT/RIGHT to pump, JUMP to let go.",
  pal:{o:"#12060a",d:"#7d1420",m:"#c4212f",l:"#e4515c",a1:"#1b2a4a",a2:"#2e4a7d",g:"#f2f2ff"},
  legPal:{o:"#080d18",d:"#1b2a4a",m:"#2e4a7d",l:"#4a6ea8"}},
 stormcall:{
@@ -787,6 +787,8 @@ function heroPose(f){
       P.aa=[-1.1,0.5]; P.ab=[-1.6,0.4];
       P.la=[1.45,0.05]; P.lb=[-0.5,1.1]; P.lean=2;
     }
+  } else if(st==="swing"){ P.aa=[2.9,0.1]; P.ab=[2.4,0.4]; P.la=[0.5,0.5]; P.lb=[-0.4,0.7];
+    P.lean=Math.max(-4,Math.min(4,Math.round((f.vx||0)*f.dir*0.8)));
   } else if(st==="dive"){ P.aa=[0.75,0.05]; P.ab=[-0.6,0.4]; P.lean=6; P.la=[-1.1,0.4]; P.lb=[-1.45,0.5];
   } else if(st==="slamland"){ P.aa=[0.35,0.1]; P.ab=[-0.5,0.6]; P.lean=5; P.crouch=3; P.la=[0.6,0.6]; P.lb=[-0.5,0.4];
   } else if(st==="hurt"){ P.lean=-3; P.aa=[-0.9,0.6]; P.ab=[-1.2,0.5]; P.la=[-0.3,0.2]; P.lb=[0.35,0.3]; }
@@ -802,6 +804,7 @@ function heroPose(f){
 }
 
 function drawHero(f){
+  drawLine(f);
   var p=f.pal,c=f.c,dir=f.dir,cx=f.x,fy=f.fy,sc=f.sc||c.sc,R=f.R||(f.R=rigFor(sc,c.bulk));
   var LP=c.legPal||p;
   FL=(f.flash>0&&(f.flash%6)<3)?"#ffffff":null;
@@ -1377,7 +1380,7 @@ var DUN=null, TORCH=[];
 function rnd(a,b){ var s=Math.sin(a*127.1+b*311.7)*43758.5453; return s-Math.floor(s); }
 var MAPS={dungeon:{name:"DUNGEON",price:0},meadow:{name:"MEADOW",price:0},wasteland:{name:"DEAD LANDS",price:0},town:{name:"TOWN",price:0},palace:{name:"GOLDEN PALACE",price:5000}};
 function buildMap(){
-  buildPlats();
+  buildPlats(); buildAnchors();
   if(S.room){ buildRoom(); return; }
   if(S.map==="meadow") buildMeadow();
   else if(S.map==="wasteland") buildWasteland();
@@ -1898,7 +1901,7 @@ function drawBG(){
     }
     G.globalAlpha=.30; px(0,0,WW,30,"#000"); px(0,WH-30,WW,30,"#000"); G.globalAlpha=1;
   }
-  drawDoor(); drawPlats(); drawAmbient();
+  drawAtmos(); drawDoor(); drawAnchors(); drawPlats(); drawAmbient();
 }
 
 /* ================= story mode ================= */
@@ -2198,7 +2201,7 @@ function storyEnd(won){
 var PLATS=[];
 /* floating platforms, placed the same way on every screen size */
 function buildPlats(){
-  var W=WORLDW, d=doorX();
+  var W=WORLDW, d=Math.round(WORLDW*0.5);
   PLATS=[{x0:Math.round(W*0.16),x1:Math.round(W*0.16)+86,z:60},
          {x0:d-44,x1:d+44,z:96},
          {x0:Math.round(W*0.84)-86,x1:Math.round(W*0.84),z:60}];
@@ -2285,13 +2288,177 @@ function drawTrainHud(){
   G.fillStyle="#7bffd0"; G.fillText("DPS "+Math.round(sum/5)+"  ·  BEST COMBO "+(S.maxCombo||0),cx,34);
 }
 
+/* ================= secret entrances ================= */
+/* Each map hides its room behind something you have to find and break:
+   three hits open it, then DOOR / F goes through. Rooms keep a plain exit. */
+var SECRETX={dungeon:0.88,meadow:0.07,wasteland:0.92,town:0.09,palace:0.87};
+var SECRETNAME={dungeon:"CRACKED WALL",meadow:"HOLLOW TREE",wasteland:"OLD MINE",town:"CELLAR DOOR",palace:"TAPESTRY"};
+function secretHit(){
+  if(S.room||S.secretOpen) return;
+  S.secretHits=(S.secretHits||0)+1;
+  var x=doorX(); shake(3); SFX.guard();
+  spark(x,GROUND-30,8,"#a89a80",4,2);
+  if(S.secretHits>=3){
+    S.secretOpen=1; shake(8); SFX.big(); flashScreen(.25);
+    for(var r=0;r<18;r++) S.fx.push({x:x+(Math.random()-.5)*26,y:GROUND-20-Math.random()*40,vx:(Math.random()-.5)*6,
+      vy:-1-Math.random()*4,g:.3,life:40+Math.random()*20,c:r%2?"#6a5a48":"#a89a80",s:3});
+    callout("SECRET FOUND: "+ROOMS[S.map],1500);
+  }
+}
+/* what the hidden entrance looks like, closed (with damage) and open */
+function drawSecret(){
+  var x=doorX(), m=S.map, hits=S.secretHits||0, open=!!S.secretOpen, t=S.frames, top=GROUND-58;
+  if(open){
+    px(x-17,top-2,34,60,"#05030a"); px(x-15,top,30,58,"#0e0818");
+    G.globalAlpha=.18+Math.sin(t*0.08)*0.06; px(x-12,top+8,24,50,"#ffd27a"); G.globalAlpha=1;
+    G.font="6px 'Press Start 2P',monospace"; G.textAlign="center";
+    G.fillStyle="#ffd23f"; G.fillText(ROOMS[m],x,top-6);
+  } else if(m==="meadow"){
+    px(x-20,GROUND-110,40,110,"#3a2814"); px(x-20,GROUND-110,6,110,"#5a3a1e"); px(x+14,GROUND-110,6,110,"#2a1a0c");
+    px(x-10,top+18,20,30,"#140a04");
+    for(var v=0;v<5-hits;v++) px(x-9+v*4,top+16,2,34,"#3f7a2e");
+    disc(x,GROUND-118,30,"#2f6a24"); disc(x-18,GROUND-110,18,"#3f7a2e"); disc(x+18,GROUND-112,20,"#3f7a2e");
+  } else if(m==="wasteland"){
+    px(x-24,top-16,48,74,"#4a3a30"); px(x-24,top-16,48,4,"#6a5444");
+    px(x-14,top,28,58,"#120a06");
+    for(var bd=0;bd<4-hits;bd++) px(x-17,top+6+bd*13,34,6,bd%2?"#6a4420":"#5a3a1e");
+    px(x-2,top-26,4,10,"#2a1a0e"); px(x-12,top-28,24,4,"#2a1a0e");
+  } else if(m==="town"){
+    px(x-18,top,36,58,"#2a1a0e");
+    px(x-16,top+2,32,56,"#4a2e18");
+    for(var pl=0;pl<3-hits+1&&pl<3;pl++) px(x-20,top+8+pl*18,40,6,"#6a4420");
+    if(hits<3) px(x-3,top+30,6,5,"#2a2a2a");
+  } else if(m==="palace"){
+    px(x-20,top-24,40,4,"#a5822c");
+    var tear=hits*8;
+    px(x-18,top-20,36,78-tear,"#7a1428"); px(x-18,top-20,36,3,"#e0c256");
+    disc(x,top+10,6,"#e0c256");
+    if(hits) for(var tq=0;tq<hits;tq++) px(x-14+tq*10,top+40-tear+tq*4,3,18,"#3a0a14");
+  } else {
+    /* dungeon: a patch of loose, cracked bricks */
+    for(var by=0;by<4;by++) for(var bx=0;bx<2;bx++) px(x-16+bx*16+(by%2)*4,top+6+by*13,14,11,"#2a2038");
+    var cr=["#0c0814","#0c0814","#0c0814"];
+    if(hits>=0){ px(x-2,top+6,2,20,cr[0]); px(x,top+24,8,2,cr[0]); }
+    if(hits>=1){ px(x-10,top+20,2,18,cr[1]); px(x-8,top+36,10,2,cr[1]); }
+    if(hits>=2){ px(x+6,top+30,2,22,cr[2]); px(x-14,top+48,12,2,cr[2]); }
+  }
+  /* a faint glint or a puff of dust now and then: the only clue */
+  if(!open&&(t%300)<8){ G.globalAlpha=.7; px(x-6+((t/300|0)*13)%12,top+10+((t/300|0)*7)%30,2,2,"#ffffff"); G.globalAlpha=1; }
+  if(!open&&(t%420)>400) px(x-4+Math.random()*8,top+60-(t%420-400)*2,2,2,"#a89a80");
+}
+/* the plain exit inside a room */
+function drawExit(){
+  var x=doorX(), top=GROUND-58;
+  px(x-17,top-2,34,60,"#1a1420"); px(x-15,top,30,58,"#3a2414");
+  for(var p=0;p<30;p+=6) px(x-15+p,top,1,58,"#2a1a0e");
+  G.font="6px 'Press Start 2P',monospace"; G.textAlign="center"; G.fillStyle="#7bffd0"; G.fillText("EXIT",x,top-6);
+}
+
+/* ================= grapple points and swinging ================= */
+var ANCH=[];
+function buildAnchors(){
+  var W=WORLDW, top=Math.max(70,Math.min(165,GROUND-40));
+  ANCH=[0.1,0.27,0.44,0.61,0.78,0.94].map(function(f,i){ return {x:Math.round(W*f)+((i*37)%34)-17, z:top-((i*23)%28), i:i}; });
+}
+function drawAnchors(){
+  var key=S.room?"room":S.map, t=S.frames;
+  for(var i=0;i<ANCH.length;i++){ var a=ANCH[i], y=GROUND-a.z;
+    if(key==="meadow"){ px(a.x-30,y-4,60,6,"#3a2814"); px(a.x-30,y-4,60,2,"#5a3a1e");
+      disc(a.x-26,y-10,12,"#2f6a24"); disc(a.x+24,y-12,14,"#3f7a2e"); disc(a.x,y-16,10,"#2f6a24"); }
+    else if(key==="palace"){ px(a.x,0,1,y-4,"#a5822c"); px(a.x-16,y-4,32,3,"#e0c256");
+      for(var k=-2;k<=2;k++){ px(a.x+k*7-1,y-10,2,6,"#fff6d0"); G.globalAlpha=.12; disc(a.x+k*7,y-10,6,"#ffd27a"); G.globalAlpha=1; } }
+    else if(key==="town"){ px(a.x-34,y-3,68,6,"#4a2e18"); px(a.x-34,y-3,68,2,"#6a4420"); px(a.x-1,y+3,2,8,"#2a1a0e"); px(a.x-3,y+10,6,6,"#ffb347"); }
+    else if(key==="wasteland"){ px(a.x,0,2,y,"#3a2d22"); px(a.x-10,y-2,20,3,"#5a4434"); px(a.x-2,y+1,5,6,"#8a5a2a"); }
+    else { for(var c=0;c<y-8;c+=6) px(a.x,c,2,4,"#3a3348"); disc(a.x+1,y,5,"#5a5468"); disc(a.x+1,y,3,"#1a1420"); }
+  }
+  var h=S.hero, na=(h&&h.id==="weaver"&&h.st!=="swing")?nearAnchor(h):null;
+  if(na){ var ny=GROUND-na.z; G.globalAlpha=.4+Math.sin(t*0.3)*0.2; disc(na.x+1,ny,9,"#f2f6ff"); G.globalAlpha=1;
+    G.font="6px 'Press Start 2P',monospace"; G.textAlign="center"; G.fillStyle="#000"; G.fillText("▲ SWING",na.x+1,ny-13); G.fillStyle="#fff"; G.fillText("▲ SWING",na.x,ny-14); }
+}
+/* the closest point above you that's in reach of a line, while airborne */
+function nearAnchor(h){
+  if(!(h.z>3)||h.onPlat) return null;
+  var best=null,bd=1e9;
+  for(var i=0;i<ANCH.length;i++){ var a=ANCH[i], dx=a.x-h.x, dz=a.z-h.z;
+    if(dz<30||Math.abs(dx)>130) continue;
+    var d=Math.sqrt(dx*dx+dz*dz); if(d<190&&d<bd){ bd=d; best=a; } }
+  return best;
+}
+function startSwing(h,a){
+  var dx=h.x-a.x, dz=a.z-h.z, L=Math.sqrt(dx*dx+dz*dz);
+  h.st="swing"; h.t=0; h.swA=a; h.swL=Math.max(40,Math.min(L,a.z-6));
+  h.swTh=Math.atan2(dx,dz);
+  var c=Math.cos(h.swTh), s=Math.sin(h.swTh);
+  h.swW=((h.vx||0)*c+h.vz*s)/h.swL+h.dir*0.025;
+  h.vz=0; SFX.zap(); spark(a.x,GROUND-a.z,6,"#f2f6ff",3,1);
+}
+function updSwing(h){
+  var a=h.swA; if(!a){ h.st="idle"; return; }
+  h.swW+=-(0.42/h.swL)*Math.sin(h.swTh);
+  if(IN.right) h.swW+=0.0018; if(IN.left) h.swW-=0.0018;
+  h.swW*=0.996; h.swTh+=h.swW;
+  if(h.swTh>1.5){ h.swTh=1.5; h.swW*=-0.3; } if(h.swTh<-1.5){ h.swTh=-1.5; h.swW*=-0.3; }
+  var nx=a.x+h.swL*Math.sin(h.swTh), nz=a.z-h.swL*Math.cos(h.swTh);
+  h.vx=nx-h.x; h.vz=nz-h.z; h.x=nx; h.z=Math.max(2,nz);
+  if(Math.abs(h.vx)>0.2) h.dir=h.vx>0?1:-1;
+  /* let go: JUMP or ATTACK flings you along the swing */
+  if(h.swRel&&h.t>6){ h.swRel=0;
+    h.st="idle"; h.t=0; h.swA=null; h.vx*=1.35; h.vz=Math.max(h.vz,1)+3; h.jumps=0; h.airDash=0; h.flewAir=0;
+    SFX.jump();
+  }
+  h.swRel=0; h.fy=GROUND-h.z;
+}
+function drawLine(f){
+  if(f.st!=="swing"||!f.swA) return;
+  var sc=f.sc||f.c.sc;
+  stroke(f.x+f.dir*3*sc,f.fy-46*sc,f.swA.x+1,GROUND-f.swA.z,1.4,"#f2f6ff");
+}
+
+/* ================= map atmosphere ================= */
+function drawAtmos(){
+  var key=S.room?("room_"+S.map):S.map, t=S.frames, cm=S.cam||0, W=WORLDW;
+  if(key==="dungeon"||key==="palace"||key==="room_palace"||key==="room_dungeon"){
+    /* shafts of light falling from high windows */
+    var col=key.indexOf("palace")>=0?"#fff0b0":"#9fb8ff";
+    for(var r=0;r<4;r++){ var sx=((r*311)%W)+Math.sin(t*0.01+r)*6;
+      G.globalAlpha=0.05+Math.sin(t*0.02+r)*0.015; G.fillStyle=col; G.beginPath();
+      G.moveTo(sx,0); G.lineTo(sx+26,0); G.lineTo(sx+90,GROUND); G.lineTo(sx+40,GROUND); G.closePath(); G.fill(); }
+    G.globalAlpha=1;
+  }
+  if(key==="dungeon"||key==="wasteland"||key==="room_dungeon"||key==="room_meadow"){
+    /* low fog drifting along the floor */
+    for(var f=0;f<3;f++){ var off=(t*(0.2+f*0.1))%160;
+      for(var x=-160+off-((cm*0.2)%160)+cm;x<cm+WW+160;x+=160){ G.globalAlpha=0.06; disc(x,GROUND-6-f*6,46+f*8,key==="wasteland"?"#c8a080":"#8a90b0"); } }
+    G.globalAlpha=1;
+  }
+  if(key==="meadow"){
+    /* grass along the front edge, swaying */
+    for(var g=Math.floor(cm/5)*5-10;g<cm+WW+10;g+=5){ var hh=5+((g*13)%6), sw=Math.sin(t*0.05+g*0.07)*2;
+      stroke(g,GROUND+2,g+sw,GROUND+2-hh,2,((g/5)%3)?"#3f7a2e":"#5a9a3a"); }
+    G.globalAlpha=0.06; for(var sr=0;sr<3;sr++){ var rx=cm+WW*(0.2+sr*0.3);
+      G.fillStyle="#fff7c0"; G.beginPath(); G.moveTo(rx,0); G.lineTo(rx+30,0); G.lineTo(rx-40,GROUND); G.lineTo(rx-80,GROUND); G.closePath(); G.fill(); }
+    G.globalAlpha=1;
+  }
+  if(key==="wasteland"){
+    /* heat haze and blowing dust */
+    for(var hz=0;hz<6;hz++){ var hy=GROUND-20-hz*16-((t*0.4)%16);
+      G.globalAlpha=0.05; for(var hx=cm;hx<cm+WW;hx+=8) px(hx,hy+Math.sin((hx+t)*0.08)*2,6,1,"#ffd8a0"); }
+    G.globalAlpha=0.25; for(var ds=0;ds<6;ds++) px(cm+((ds*170+t*2.2)%(WW+60))-30,GROUND-10-ds*14,18,1,"#c8a080");
+    G.globalAlpha=1;
+  }
+  if(key==="town"||key==="room_town"){
+    for(var lg=0;lg<TORCH.length;lg++){ G.globalAlpha=0.07+Math.sin(t*0.1+lg)*0.02; disc(TORCH[lg].x,GROUND,40,"#ffb347"); }
+    G.globalAlpha=1;
+  }
+}
+
 /* ================= doors & rooms ================= */
 /* Every map has a door in the middle of the arena. Walking up to it and
    pressing DOOR (or F) moves the whole fight into that map's inner room
    until someone goes back out through the exit door. */
 var ROOMS={dungeon:"TREASURE VAULT",meadow:"CRYSTAL CAVE",wasteland:"OLD BUNKER",town:"TAVERN",palace:"THRONE ROOM"};
 var ROOMFX=[];
-function doorX(){ return Math.round(WORLDW*0.5); }
+function doorX(){ return Math.round(WORLDW*(SECRETX[S.map]||0.88)); }
 function buildRoom(){
   var WW=WORLDW;
   DUN=document.createElement('canvas'); DUN.width=WW; DUN.height=WH;
@@ -2482,31 +2649,16 @@ function drawAmbient(){
 }
 function drawDoor(){
   if(S.scene!=="fight") return;
-  var x=doorX(), top=GROUND-74, w=44, open=(S.doorAnim||0)>0;
-  // stone arch frame
-  px(x-w/2-8,top-10,w+16,84,"#1a1420"); px(x-w/2-6,top-8,w+12,82,"#5a5468");
-  for(var k=0;k<14;k++){ var aw=(w+12)*Math.sqrt(Math.max(0,1-Math.pow((14-k)/14,2)));
-    px(x-aw/2,top-22+k,aw,1,"#5a5468"); }
-  px(x-w/2,top,w,74,open?"#fff5c0":"#3a2414");
-  if(!open){
-    for(var p=0;p<w;p+=8) px(x-w/2+p,top,1,74,"#2a1a0e");
-    px(x-w/2,top+16,w,3,"#2a2a2a"); px(x-w/2,top+52,w,3,"#2a2a2a");
-    disc(x+w/2-7,top+38,2,"#e0c256");
-  }
-  var sign=S.room?"EXIT":ROOMS[S.map];
-  G.font="6px 'Press Start 2P',monospace"; G.textAlign="center";
-  var sw=sign.length*6+8;
-  px(x-sw/2,top-34,sw,11,"#120a06"); px(x-sw/2,top-34,sw,1,"#e0c256");
-  G.fillStyle=S.room?"#7bffd0":"#ffd23f"; G.fillText(sign,x,top-26);
-  if(nearDoor()){
-    G.globalAlpha=.25+Math.sin(S.frames*0.2)*0.12; px(x-w/2-4,top-4,w+8,82,"#ffd23f"); G.globalAlpha=1;
+  if(S.room) drawExit(); else drawSecret();
+  if(nearDoor()){ var x=doorX(), top=GROUND-58;
+    G.globalAlpha=.22+Math.sin(S.frames*0.2)*0.1; px(x-19,top-4,38,64,"#ffd23f"); G.globalAlpha=1;
     var tip=(S.room?"▲ LEAVE":"▲ ENTER")+" · DOOR / F";
-    G.fillStyle="#000"; G.fillText(tip,x+1,top-43); G.fillStyle="#fff"; G.fillText(tip,x,top-44);
-  }
+    G.font="6px 'Press Start 2P',monospace"; G.textAlign="center";
+    G.fillStyle="#000"; G.fillText(tip,x+1,top-15); G.fillStyle="#fff"; G.fillText(tip,x,top-16); }
 }
 function nearDoor(){
   var h=S.hero;
-  return !!(h&&S.scene==="fight"&&h.hp>0&&h.z<6&&Math.abs(h.x-doorX())<24&&!((S.doorCd||0)>0));
+  return !!(h&&S.scene==="fight"&&(S.room||S.secretOpen)&&h.hp>0&&h.z<6&&Math.abs(h.x-doorX())<24&&!((S.doorCd||0)>0));
 }
 var doorBtnOn=false;
 function updDoor(){
@@ -2749,13 +2901,14 @@ function updHero(){
       if(mv!==0){ h.x+=mv*c.spd*1.12*((h.netSlow>0)?0.5:1); h.st="walk"; } }
     if(IN.jump&&IN.block&&h.onPlat){ h.onPlat=null; h.dropT=14; h.vz=-1.5; }
     else if(IN.jump&&(h.z===0||h.onPlat||h.coy>0)){ h.vz=7.4; h.onPlat=null; h.coy=0; SFX.jump(); spark(h.x,h.fy,4,"#cfc3b0",2,1); }
+    else if(IN.jump&&h.id==="weaver"&&nearAnchor(h)){ startSwing(h,nearAnchor(h)); }
     else if(IN.jump&&!c.fly&&h.z>3&&!(h.jumps>0)){ h.jumps=1; h.vz=6.6; SFX.jump(); ring(h.x,h.fy,"#cfe8ff"); }
     if(IN.abil&&c.ability&&h.abilCd<=0){
       h.buff=c.abilDur; h.abilCd=c.abilCd; IN.abil=0;
       callout(c.ability+" UP",900); beep(520,.12,"triangle",.07,880);
       ring(h.x,h.fy-20,"#ffd23f");
     }
-    if(IN.atk&&h.cd===0&&!IN.block&&h.id==="ironclad"&&h.z>24&&!h.onPlat){
+    if(IN.atk&&h.cd===0&&!IN.block&&h.id==="ironclad"&&h.z>24&&!h.onPlat&&h.flewAir){
       var dt=TGT(), gx=(dt&&dt.hp>0)?dt.x-h.dir*10:h.x+h.dir*60;
       h.st="dive"; h.t=0; h.vz=-6.5; h.diveVx=Math.max(-8,Math.min(8,(gx-h.x)/Math.max(6,h.z/7.5)));
       h.dir=(gx>=h.x)?1:-1; callout("DIVE!",500); SFX.zap(); IN.atk=0; }
@@ -2765,6 +2918,7 @@ function updHero(){
     else if(IN.spec&&h.en>=c.spCost&&!IN.block){ h.st="special"; h.t=0; h.spStage=0;
       h.en-=c.spCost; callout(c.sp,800); SFX.zap(); }
   }
+  if(h.st==="swing"&&(IN.jump||IN.atk)) h.swRel=1;
   IN.atk=0; IN.spec=0; IN.jump=0; IN.abil=0; IN.dash=0;
   if(h.abilCd>0)h.abilCd--;
   if(h.buff>0)h.buff--;
@@ -2775,7 +2929,7 @@ function updHero(){
     var ceil=Math.min(150,GROUND-64);
     var thrusting = IN.hold && h.stam>0 && h.z>1 && h.z<ceil && h.st!=="hurt" && h.st!=="ko" && h.st!=="dive" && h.st!=="slamland";
     if(thrusting){
-      h.vz=Math.min(h.vz+0.6,3.4); h.stam-=(c.flyDrain||1.15); h.flying=true;
+      h.vz=Math.min(h.vz+0.6,3.4); h.stam-=(c.flyDrain||1.15); h.flying=true; h.flewAir=1;
       if(h.id==="ironclad"&&h.z>40&&!S.taught.dive){ S.taught.dive=1; callout("PRESS ATTACK IN THE AIR TO DIVE SLAM",1800); }
       if(S.frames%2===0){ spark(h.x-h.dir*2,h.fy-3,1,"#ffb03a",1.6,-1.2);
         if(S.frames%8===0) beep(180,.05,"sawtooth",.03,120); }
@@ -2784,6 +2938,8 @@ function updHero(){
   }
 
   if(h.st==="attack"){
+    /* any punch thrown right next to it counts, whichever way you're facing */
+    if(h.t===c.hitFrame&&h.z<30&&Math.abs(h.x-doorX())<44) secretHit();
     if(h.t===c.hitFrame){
       if(c.ranged){
         S.shots.push({x:h.x+h.dir*16*sc,y:h.fy-38*sc,vx:h.dir*(c.shot==="web"?8:7),
@@ -2811,6 +2967,7 @@ function updHero(){
   }
   if(h.st==="slamland"&&h.t>18){ h.st="idle"; h.t=0; }
 
+  if(h.st==="swing") updSwing(h); else {
   /* rise at the old rate, fall faster, and let go of jump early for a short hop */
   var z0=h.z, gv=(h.vz<0)?0.46:0.33;
   if(h.vz>0&&!IN.hold&&!c.fly&&h.st!=="special"&&h.st!=="dive") gv=0.62;
@@ -2818,12 +2975,15 @@ function updHero(){
   if(h.onPlat){ h.z=h.onPlat.z; h.vz=0; }
   else { h.vz-=gv; h.z+=h.vz;
     if(h.vz<0&&!(h.dropT>0)) for(var pi=0;pi<PLATS.length;pi++){ var pl=PLATS[pi];
-      if(h.x>=pl.x0&&h.x<=pl.x1&&z0>=pl.z&&h.z<=pl.z){ h.z=pl.z; h.vz=0; h.onPlat=pl; h.jumps=0; h.airDash=0;
+      if(h.x>=pl.x0&&h.x<=pl.x1&&z0>=pl.z&&h.z<=pl.z){ h.z=pl.z; h.vz=0; h.onPlat=pl; h.jumps=0; h.airDash=0; h.flewAir=0;
         if(h.st==="dive") diveImpact(h); break; } } }
   if(h.dropT>0) h.dropT--;
   if(h.coy>0) h.coy--;
-  if(h.z<=0){h.z=0;h.vz=0; h.jumps=0; h.airDash=0;
+  if(h.z<=0){h.z=0;h.vz=0; h.jumps=0; h.airDash=0; h.flewAir=0;
     if(h.st==="dive") diveImpact(h); }
+  }
+  /* momentum carried out of a swing */
+  if(h.vx&&h.st!=="swing"){ h.x+=h.vx; h.vx*=(h.z>0&&!h.onPlat?0.985:0.6); if(Math.abs(h.vx)<0.05) h.vx=0; }
   if(h.knock){ h.x+=h.knock; h.knock*=.86; if(Math.abs(h.knock)<.15)h.knock=0; }
   h.x=Math.max(18,Math.min(WORLDW-18,h.x));
   var b2=TGT(), sep=tgtHalf()+12*sc;
@@ -3595,7 +3755,7 @@ function onNetData(d){
     if(f.rf!=null){ var gap=Math.max(1,S.frames-f.rf);
       f.vx=Math.max(-12,Math.min(12,(nx-f.rx)/gap)); }
     f.rx=nx; f.rf=S.frames; f.tx=nx;
-    f.zt=+d.z||0; f.st=d.st||"idle"; f.dir=+d.d||-1;
+    f.zt=+d.z||0; f.st=d.st||"idle"; f.dir=+d.d||-1; f.swA=(+d.an>=0)?ANCH[+d.an]:null;
     f.hp=+d.hp; f.maxhp=+d.mhp||f.maxhp;
     f.buff=d.bf?60:0;
     if(d.dead){ f.hp=0; f.st="ko"; f.vx=0; checkWin(); }
@@ -3706,7 +3866,8 @@ function checkWin(why){
 function sendState(){
   var h=S.hero; if(!h) return;
   netSend({t:'s',q:++NET.sq,x:Math.round(h.x),z:Math.round(h.z),st:h.st,d:h.dir,
-    hp:Math.round(Math.max(0,h.hp)),mhp:h.maxhp,dead:(h.hp<=0)?1:0,bf:(h.buff>0)?1:0});
+    hp:Math.round(Math.max(0,h.hp)),mhp:h.maxhp,dead:(h.hp<=0)?1:0,bf:(h.buff>0)?1:0,
+    an:(h.st==="swing"&&h.swA)?h.swA.i:-1});
 }
 /* Projectiles and beams only did damage on the thrower's screen, so
    everyone else never saw them. Send each new one out as a picture-only
@@ -4070,7 +4231,7 @@ function setScene(n){ S.scene=n;
   if(n==="vs"){ show(scVs); updateVsUI(); } }
 function startFight(){
   if(isLocked(S.pick)) return;
-  S.mode="pve"; S.foe=null; S.foes=null; S.room=null; S.allies=null; S.says=[]; S.crater=null;
+  S.mode="pve"; S.foe=null; S.foes=null; S.room=null; S.allies=null; S.says=[]; S.crater=null; S.secretOpen=0; S.secretHits=0;
   PVPW=0; WORLDW=Math.round(WW*2.4);
   stopTune();
   buildMap();
@@ -4201,7 +4362,7 @@ function beginDuel(map,roster,w,boss){
     if(r.hero) q.hero=CHARS[r.hero]?r.hero:"ironclad";
     if(r.bs!=null) q.bs=+r.bs||0; });
   var coop=(NET.mode==="coop");
-  S.mode=coop?"coop":"pvp"; S.boss=null; S.room=null; S.crater=null;
+  S.mode=coop?"coop":"pvp"; S.boss=null; S.room=null; S.crater=null; S.secretOpen=0; S.secretHits=0;
   if(coop&&boss&&BOSSDEF[boss]) S.bossPick=boss;
   /* everyone's ready flag is spent once the fight starts */
   NET.ready=false; for(var p in NET.players) NET.players[p].ready=false;
