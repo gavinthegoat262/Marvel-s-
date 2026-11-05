@@ -68,6 +68,8 @@ canvas#cv{position:absolute;inset:0;width:100%;height:100%;display:block;
 #bBlock{right:96px;bottom:84px;width:62px;height:62px;background:rgba(60,50,110,.6)}
 #bAbil{right:158px;bottom:44px;width:60px;height:60px;background:rgba(20,120,95,.62)}
 #bAbil.off{opacity:.4}
+#bDash{right:166px;bottom:2px;width:54px;height:54px;background:rgba(40,140,120,.62)}
+#btnExitTrain{position:fixed;left:8px;top:64px;z-index:20;display:none}
 #bDoor{right:170px;bottom:118px;width:58px;height:58px;background:rgba(160,110,30,.7)}
 #btns{width:232px}
 
@@ -199,6 +201,7 @@ button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
   <div id="ctl">
     <div id="stick"><div id="knob"></div><div class="lbl">MOVE · PUSH UP TO JUMP</div></div>
     <div id="btns">
+      <button class="rb" id="bDash"><span>»</span><em>DASH</em></button>
       <button class="rb" id="bDoor" style="display:none"><span>🚪</span><em>DOOR</em></button>
       <button class="rb" id="bAbil" style="display:none"><span>✦</span><em id="abLbl">AEGIS</em></button>
       <button class="rb" id="bBlock"><span>🛡</span><em>BLOCK</em></button>
@@ -227,6 +230,7 @@ button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
       <button class="small cratebtn" id="btnCrate">CRATE · $500</button>
       <button class="small vsbtn" id="btnVs">ONLINE PVP</button>
       <button class="small storybtn" id="btnStory">STORY MODE</button>
+      <button class="small" id="btnTrain">TRAINING</button>
     </div>
     <div id="crateout"></div>
     <div id="cheatrow"><input id="cheat" type="text" inputmode="numeric" placeholder="code" maxlength="8"><button class="small" id="btnCheat">ENTER</button></div>
@@ -275,6 +279,7 @@ button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
       <button class="small" id="btnSwap">Change hero</button>
     </div>
   </div>
+  <button class="small" id="btnExitTrain">EXIT TRAINING</button>
   <div id="dlg"><canvas id="dlgPic" width="58" height="84"></canvas>
     <div style="flex:1"><div id="dlgName"></div><div id="dlgText"></div><div id="dlgHint"></div></div></div>
 </div>
@@ -1368,6 +1373,7 @@ var DUN=null, TORCH=[];
 function rnd(a,b){ var s=Math.sin(a*127.1+b*311.7)*43758.5453; return s-Math.floor(s); }
 var MAPS={dungeon:{name:"DUNGEON",price:0},meadow:{name:"MEADOW",price:0},wasteland:{name:"DEAD LANDS",price:0},town:{name:"TOWN",price:0},palace:{name:"GOLDEN PALACE",price:5000}};
 function buildMap(){
+  buildPlats();
   if(S.room){ buildRoom(); return; }
   if(S.map==="meadow") buildMeadow();
   else if(S.map==="wasteland") buildWasteland();
@@ -1888,7 +1894,7 @@ function drawBG(){
     }
     G.globalAlpha=.30; px(0,0,WW,30,"#000"); px(0,WH-30,WW,30,"#000"); G.globalAlpha=1;
   }
-  drawDoor(); drawAmbient();
+  drawDoor(); drawPlats(); drawAmbient();
 }
 
 /* ================= story mode ================= */
@@ -2184,6 +2190,97 @@ function storyEnd(won){
   }
 }
 
+/* ================= demo: movement, platforms, feel ================= */
+var PLATS=[];
+/* floating platforms, placed the same way on every screen size */
+function buildPlats(){
+  var W=WORLDW, d=doorX();
+  PLATS=[{x0:Math.round(W*0.16),x1:Math.round(W*0.16)+86,z:60},
+         {x0:d-44,x1:d+44,z:96},
+         {x0:Math.round(W*0.84)-86,x1:Math.round(W*0.84),z:60}];
+}
+var PLATSTYLE={dungeon:["#3a2c46","#54425f","#1b1326","#2a2130"],meadow:["#6a4a26","#8a6234","#3a2814","#3f7a2e"],
+  wasteland:["#4a3a30","#6a5444","#241a14","#8a3a1a"],town:["#6a4420","#8a5a2c","#2a1a0e","#4a2e18"],
+  palace:["#d8d0c0","#ffffff","#8a8070","#e0c256"]};
+function drawPlats(){
+  var st=PLATSTYLE[S.map]||PLATSTYLE.dungeon;
+  for(var i=0;i<PLATS.length;i++){ var p=PLATS[i], y=GROUND-p.z, w=p.x1-p.x0;
+    G.globalAlpha=.22; px(p.x0+6,GROUND+1,w-12,3,"#000"); G.globalAlpha=1;
+    /* supports: chains on stone, posts on wood, struts on metal */
+    if(S.map==="dungeon"||S.map==="palace"){ for(var c=0;c<2;c++){ var cx=p.x0+14+c*(w-28); for(var k=0;k<y;k+=6) px(cx,k,2,4,st[3]); } }
+    else { px(p.x0+10,y+8,4,p.z-8,st[2]); px(p.x1-14,y+8,4,p.z-8,st[2]); }
+    px(p.x0-1,y-1,w+2,10,"#0a0610"); px(p.x0,y,w,8,st[0]); px(p.x0,y,w,2,st[1]);
+    for(var s=0;s<w;s+=12) px(p.x0+s,y+3,1,5,st[2]);
+    if(S.map==="meadow") for(var g=0;g<w;g+=4) px(p.x0+g,y-2-((g*7)%3),2,3,st[3]);
+    if(S.map==="palace") px(p.x0,y+6,w,2,st[3]);
+  }
+}
+/* foreground layer: moves faster than the arena, for depth */
+function drawForeground(){
+  var cm=S.cam||0, k=0.4, key=S.room?"room":S.map;
+  var col={dungeon:"#08050c",meadow:"#0e2a10",wasteland:"#120a06",town:"#140c08",palace:"#1a1020",room:"#060408"}[key]||"#060408";
+  G.globalAlpha=.88;
+  for(var i=-1;i<6;i++){ var bx=i*180-((cm*k)%180)+cm, h=10+((i*37)&15);
+    if(key==="meadow"){ for(var b=0;b<9;b++) px(bx+b*5,WH-h-((b*13)%9),3,h+((b*13)%9),col); }
+    else if(key==="dungeon"||key==="room"){ px(bx,WH-14,46,14,col); px(bx+6,WH-22,34,8,col); }
+    else if(key==="wasteland"){ px(bx,WH-10,30,10,col); px(bx+18,WH-26,3,18,col); px(bx+12,WH-24,14,2,col); }
+    else if(key==="town"){ for(var f=0;f<4;f++) px(bx+f*12,WH-24,4,24,col); px(bx,WH-18,44,3,col); }
+    else { px(bx,WH-30,12,30,col); px(bx-2,WH-32,16,4,col); }
+  }
+  G.globalAlpha=1;
+}
+/* dash: a quick burst with a moment of invincibility, once per jump in the air */
+function tryDash(h,dirIn){
+  if((h.dashCd||0)>0||h.st==="ko"||h.st==="special"||h.st==="dive") return;
+  if(h.z>0&&!h.onPlat&&h.airDash) return;
+  if(h.z>0&&!h.onPlat) h.airDash=1;
+  h.dashT=11; h.dashDir=dirIn||h.dir; h.dashCd=42; h.inv=Math.max(h.inv,12);
+  if(h.st==="block") h.st="idle";
+  SFX.jump(); spark(h.x,h.fy-10,6,"#cfe8ff",3,1.5);
+}
+function updDash(h){
+  if(h.dashCd>0) h.dashCd--;
+  if(!(h.dashT>0)) return false;
+  h.dashT--; h.x+=h.dashDir*(4+h.dashT*0.5); h.dir=h.dashDir;
+  if(h.z>0&&!h.onPlat) h.vz=Math.max(h.vz,0);
+  if(S.frames%2===0) (S.ghosts=S.ghosts||[]).push({f:Object.assign({},h,{flash:0}),life:10});
+  return true;
+}
+function drawGhosts(){
+  if(!S.ghosts) return;
+  for(var i=S.ghosts.length-1;i>=0;i--){ var g=S.ghosts[i];
+    if(--g.life<=0){ S.ghosts.splice(i,1); continue; }
+    G.globalAlpha=g.life/10*0.35; drawHero(g.f); G.globalAlpha=1; }
+}
+/* big slams shake you off nearby platforms */
+function quakePlats(x){
+  var h=S.hero; if(!h||!h.onPlat) return;
+  if(Math.abs(h.x-x)<140){ h.onPlat=null; h.vz=2; callout("SHAKEN OFF!",600); }
+}
+/* rank at the end of a win */
+function fightRank(){
+  var h=S.hero, mc=S.maxCombo||0, hp=h?h.hp/h.maxhp:0;
+  var r=(mc>=25&&hp>0.5)?"S":(mc>=18?"A":(mc>=12?"B":(mc>=6?"C":"D")));
+  return {r:r,cash:{S:150,A:100,B:60,C:25,D:0}[r]};
+}
+/* training: a dummy that never attacks, and a damage-per-second meter */
+function startTraining(){
+  startFight(); S.training=1;
+  S.boss.hp=S.boss.maxhp=99999; S.boss.cd=1e9; S.dmgLog=[];
+  document.getElementById('btnExitTrain').style.display="";
+  callout("TRAINING",1100);
+}
+function drawTrainHud(){
+  if(!S.training||S.scene!=="fight") return;
+  var now=S.frames, sum=0;
+  S.dmgLog=(S.dmgLog||[]).filter(function(d){ return now-d[0]<300; });
+  S.dmgLog.forEach(function(d){ sum+=d[1]; });
+  var cx=(S.cam||0)+WW/2;
+  G.font="7px 'Press Start 2P',monospace"; G.textAlign="center";
+  G.fillStyle="#000"; G.fillText("DPS "+Math.round(sum/5)+"  ·  BEST COMBO "+(S.maxCombo||0),cx+1,35);
+  G.fillStyle="#7bffd0"; G.fillText("DPS "+Math.round(sum/5)+"  ·  BEST COMBO "+(S.maxCombo||0),cx,34);
+}
+
 /* ================= doors & rooms ================= */
 /* Every map has a door in the middle of the arena. Walking up to it and
    pressing DOOR (or F) moves the whole fight into that map's inner room
@@ -2469,7 +2566,7 @@ function refreshIcons(){
 /* ================= state ================= */
 var S={scene:"title",mode:"pve",map:"dungeon",bossPick:"vorak",pick:"ironclad",frames:0,shake:0,hitstop:0,hero:null,boss:null,
  fx:[],shots:[],beams:[],nums:[],combo:0,comboT:0,dealt:0,taught:{},startTime:0};
-var IN={left:0,right:0,jump:0,hold:0,atk:0,spec:0,block:0,abil:0};
+var IN={left:0,right:0,jump:0,hold:0,atk:0,spec:0,block:0,abil:0,dash:0};
 var sound=true,AC=null;
 function syncMuteBtn(){
   var b=document.getElementById('btnMute'); if(!b) return;
@@ -2596,10 +2693,15 @@ function damageBoss(amount,knock,extra){
   b.lastHit=S.frames;
   amount=Math.round(amount*((S.hero&&S.hero.atkMul)||1));
   b.hp-=amount; S.dealt+=amount; b.flash=10; b.knock=knock||0;
+  if(S.training) S.dmgLog.push([S.frames,amount]);
+  b.stg=(S.frames-(b.stgT||0)>120?0:(b.stg||0))+amount; b.stgT=S.frames;
+  if(b.stg>=200&&b.hp>0){ b.stg=0; b.st="idle"; b.tel=null; b.cd=Math.max(b.cd||0,55); b.knock=(b.x>=S.hero.x?1:-1)*5;
+    popNum(b.x,b.fy-100,"STAGGER!","#ffd23f"); shake(8); }
   S.combo++; S.comboT=100; S.hero.en=Math.min(100,S.hero.en+7);
   popNum(b.x+(Math.random()*24-12),b.fy-70,amount,"#ffd23f");
   spark(b.x-S.hero.dir*10,b.fy-56,8,"#ffd23f",5,3.2);
   shake(4); S.hitstop=2; SFX.hit();
+  if(amount>=40){ S.hitstop=5; shake(9); }
   if(b.hp<=0){ b.hp=0; endGame(true); }
 }
 function damageHero(amount,knock,unblockable){
@@ -2633,12 +2735,17 @@ function updHero(){
   var TG=TGT();
   if(h.st!=="attack"&&h.st!=="special"&&TG) h.dir=(TG.x>=h.x)?1:-1;
   if(h.st==="hurt"&&h.t>18){h.st="idle";h.t=0;}
+  var dashing=updDash(h);
   var free=(h.st==="idle"||h.st==="walk"||h.st==="block");
   if(free){
     h.st=IN.block?"block":"idle";
-    if(!IN.block){ var mv=(IN.right?1:0)-(IN.left?1:0);
-      if(mv!==0){ h.x+=mv*c.spd*((h.netSlow>0)?0.5:1); h.st="walk"; } }
-    if(IN.jump&&h.z===0){ h.vz=7.0; SFX.jump(); }
+    var mvd=(IN.right?1:0)-(IN.left?1:0);
+    if(IN.dash) tryDash(h,mvd||h.dir);
+    if(!IN.block&&!dashing){ var mv=mvd;
+      if(mv!==0){ h.x+=mv*c.spd*1.12*((h.netSlow>0)?0.5:1); h.st="walk"; } }
+    if(IN.jump&&IN.block&&h.onPlat){ h.onPlat=null; h.dropT=14; h.vz=-1.5; }
+    else if(IN.jump&&(h.z===0||h.onPlat||h.coy>0)){ h.vz=7.4; h.onPlat=null; h.coy=0; SFX.jump(); spark(h.x,h.fy,4,"#cfc3b0",2,1); }
+    else if(IN.jump&&!c.fly&&h.z>3&&!(h.jumps>0)){ h.jumps=1; h.vz=6.6; SFX.jump(); ring(h.x,h.fy,"#cfe8ff"); }
     if(IN.abil&&c.ability&&h.abilCd<=0){
       h.buff=c.abilDur; h.abilCd=c.abilCd; IN.abil=0;
       callout(c.ability+" UP",900); beep(520,.12,"triangle",.07,880);
@@ -2654,7 +2761,7 @@ function updHero(){
     else if(IN.spec&&h.en>=c.spCost&&!IN.block){ h.st="special"; h.t=0; h.spStage=0;
       h.en-=c.spCost; callout(c.sp,800); SFX.zap(); }
   }
-  IN.atk=0; IN.spec=0; IN.jump=0; IN.abil=0;
+  IN.atk=0; IN.spec=0; IN.jump=0; IN.abil=0; IN.dash=0;
   if(h.abilCd>0)h.abilCd--;
   if(h.buff>0)h.buff--;
 
@@ -2699,7 +2806,18 @@ function updHero(){
   }
   if(h.st==="slamland"&&h.t>18){ h.st="idle"; h.t=0; }
 
-  h.vz-=0.33; h.z+=h.vz; if(h.z<=0){h.z=0;h.vz=0;
+  /* rise at the old rate, fall faster, and let go of jump early for a short hop */
+  var z0=h.z, gv=(h.vz<0)?0.46:0.33;
+  if(h.vz>0&&!IN.hold&&!c.fly&&h.st!=="special"&&h.st!=="dive") gv=0.62;
+  if(h.onPlat&&(h.x<h.onPlat.x0-3||h.x>h.onPlat.x1+3||h.vz>0)){ if(h.vz<=0) h.coy=6; h.onPlat=null; }
+  if(h.onPlat){ h.z=h.onPlat.z; h.vz=0; }
+  else { h.vz-=gv; h.z+=h.vz;
+    if(h.vz<0&&!(h.dropT>0)) for(var pi=0;pi<PLATS.length;pi++){ var pl=PLATS[pi];
+      if(h.x>=pl.x0&&h.x<=pl.x1&&z0>=pl.z&&h.z<=pl.z){ h.z=pl.z; h.vz=0; h.onPlat=pl; h.jumps=0; h.airDash=0;
+        if(h.st==="dive") diveImpact(h); break; } } }
+  if(h.dropT>0) h.dropT--;
+  if(h.coy>0) h.coy--;
+  if(h.z<=0){h.z=0;h.vz=0; h.jumps=0; h.airDash=0;
     if(h.st==="dive") diveImpact(h); }
   if(h.knock){ h.x+=h.knock; h.knock*=.86; if(Math.abs(h.knock)<.15)h.knock=0; }
   h.x=Math.max(18,Math.min(WORLDW-18,h.x));
@@ -2826,6 +2944,9 @@ function updBoss(){
   if(b.chip>Math.max(0,b.hp)/b.maxhp) b.chip-=0.004;
   if(b.hp<=0)return;
   if(b.bind>0){ b.st="idle"; b.tel=null; return; }
+  if(S.training){ b.st="idle"; b.tel=null;
+    if(b.knock){ b.x+=b.knock; b.knock*=.84; if(Math.abs(b.knock)<.15)b.knock=0; }
+    b.x=Math.max(40,Math.min(WORLDW-40,b.x)); b.fy=GROUND; if(b.hp<b.maxhp*0.2) b.hp=b.maxhp; return; }
   var slowed=(b.slow>0);
   if(slowed) b.slow--;
   if(b.dot&&b.dot.left>0){
@@ -2905,6 +3026,8 @@ function updBoss(){
 }
 function fireAttack(kind){
   var b=S.boss,h=S.hero,def=b.def||BOSSDEF.vorak;
+  if(kind==="slam"||kind==="leapland") quakePlats(b.x);
+  if(kind==="stomp") quakePlats((b.tel&&b.tel.mark!==undefined)?b.tel.mark:b.x);
   if(kind==="leap"){
     SFX.big(); shake(5);
     spark(b.x,GROUND-4,16,"#a89a80",6,3); ring(b.x,GROUND,"#d8b6f0");
@@ -3809,7 +3932,7 @@ function updCam(){
   S.cam+=(t-S.cam)*0.11;
   if(Math.abs(t-S.cam)<0.4) S.cam=t;
 }
-function step(){ S.frames++;
+function step(){ S.frames++; S.maxCombo=Math.max(S.maxCombo||0,S.combo||0);
   if(S.hitstop>0){S.hitstop--;return;}
   if(online()&&S.foes){ for(var p in S.foes) updFoe(S.foes[p]); if(S.mode==="pvp") S.foe=nearestFoe(); }
   updHero();
@@ -3879,8 +4002,9 @@ function render(){
     for(var p in S.foes){ var f=S.foes[p]; if(!f.gone) drawHero(f); }
     for(var q in S.foes){ var g=S.foes[q]; if(g.hp>0) foeBar(g); } }
   if(S.scene==="fight"&&S.mode!=="pvp") drawSentries();
+  if(S.scene==="fight") drawGhosts();
   if(S.hero&&S.scene!=="title"&&S.scene!=="dialog") drawHero(S.hero);
-  drawFx(); if(S.scene==="fight"){ drawSays(); drawRevive(); drawCoopHud(); }
+  drawFx(); if(S.scene==="fight"){ drawForeground(); drawTrainHud(); drawSays(); drawRevive(); drawCoopHud(); }
   G.restore();
 }
 var last=0,acc=0;
@@ -3932,6 +4056,7 @@ function startFight(){
   S.hero=makeHero(S.pick); S.boss=makeBoss();
   S.fx=[];S.shots=[];S.beams=[];S.nums=[];S.bolt=null;S.sentries=[];
   S.combo=0;S.comboT=0;S.dealt=0;S.frames=0;S.shake=0;S.hitstop=0;S.cam=camTarget();
+  S.maxCombo=0; S.training=0; S.ghosts=[]; document.getElementById('btnExitTrain').style.display="none";
   for(var k in IN) IN[k]=0;
   knobReset();
   elHN.textContent=S.hero.c.name+(S.hero.bs?"  "+Array(S.hero.bs+1).join("★"):"");
@@ -3958,11 +4083,13 @@ function endGame(won){
   try{ if(won){ var key="lastst2.best."+S.hero.id, prev=localStorage.getItem(key);
     if(!prev||secs<parseInt(prev,10)){ localStorage.setItem(key,String(secs)); best=" · new best!"; }
     else best=" · best "+prev+"s"; } }catch(e){}
-  if(won){ CASH+=100; saveAll(); }
+  var RK=won?fightRank():null;
+  if(won){ CASH+=100+RK.cash; saveAll(); }
   document.getElementById('endStat').textContent=won
     ?"Cleared in "+secs+"s with "+Math.max(0,Math.round(S.hero.hp))+" HP left"+best
       +"  ·  +$100  (you have $"+CASH+")"
     :"Vorak had "+Math.round(S.boss.hp)+" HP left. You dealt "+S.dealt+". No payout.";
+  if(RK) document.getElementById('endStat').textContent+="  ·  RANK "+RK.r+" (best combo "+(S.maxCombo||0)+")"+(RK.cash?"  +$"+RK.cash+" bonus":"");
   updateShop();
   setTimeout(function(){setScene("end");},900);
   setTimeout(startTune,1400);
@@ -4067,7 +4194,7 @@ function beginDuel(map,roster,w,boss){
     S.boss=makeCoopBoss(ids.length); S.foe=null; }
   else S.foe=nearestFoe();
   S.fx=[];S.shots=[];S.beams=[];S.nums=[];S.bolt=null;S.sentries=[];
-  S.combo=0;S.comboT=0;S.dealt=0;S.frames=0;S.shake=0;S.hitstop=0;
+  S.combo=0;S.comboT=0;S.dealt=0;S.frames=0;S.shake=0;S.hitstop=0; S.maxCombo=0; S.ghosts=[];
   for(var k in IN) IN[k]=0;
   knobReset(); stopTune();
   elHN.textContent=S.hero.c.name+(S.hero.bs?"  "+Array(S.hero.bs+1).join("★"):"");
@@ -4366,6 +4493,8 @@ function tryCheat(code){
   callout("BAD CODE",800); beep(150,.2,"square",.05); return false;
 }
 document.getElementById('btnBoost').addEventListener('click',buyBoost);
+document.getElementById('btnTrain').addEventListener('click',function(){ if(isLocked(S.pick)){ callout("UNLOCK THIS HERO FIRST",1100); return; } startTraining(); });
+document.getElementById('btnExitTrain').addEventListener('click',function(){ S.training=0; this.style.display="none"; setScene("select"); });
 document.getElementById('btnStory').addEventListener('click',function(){ beep(700,.06,"square",.05); startStory(); });
 document.getElementById('dlg').addEventListener('click',function(e){ e.preventDefault(); dlgNext(); });
 document.getElementById('btnVs').addEventListener('click',function(){
@@ -4469,7 +4598,7 @@ window.addEventListener('pointerup',stickEnd);
 window.addEventListener('pointercancel',stickEnd);
 
 /* action buttons */
-[['bAtk','atk'],['bSpec','spec'],['bJump','jump'],['bBlock','block'],['bAbil','abil'],['bDoor','door']].forEach(function(pair){
+[['bAtk','atk'],['bSpec','spec'],['bJump','jump'],['bBlock','block'],['bAbil','abil'],['bDoor','door'],['bDash','dash']].forEach(function(pair){
   var el=document.getElementById(pair[0]), k=pair[1];
   function on(e){ e.preventDefault(); e.stopPropagation(); IN[k]=1; if(k==="jump") IN.hold=1; el.classList.add('hot');
     try{ el.setPointerCapture(e.pointerId); }catch(err){} }
@@ -4484,7 +4613,7 @@ window.addEventListener('pointercancel',stickEnd);
 
 /* keyboard */
 var KEYMAP={a:"left",arrowleft:"left",d:"right",arrowright:"right",w:"jump",arrowup:"jump"," ":"jump",e:"abil",q:"abil",
- j:"atk",z:"atk",k:"spec",x:"spec",f:"door",l:"block",shift:"block",s:"block",arrowdown:"block"};
+ j:"atk",z:"atk",k:"spec",x:"spec",f:"door",c:"dash",l:"block",shift:"block",s:"block",arrowdown:"block"};
 /* true when the user is typing into the join-code or cheat box - game
    keybinds must stay out of the way or letters never reach the field */
 function typingInField(e){
@@ -4505,7 +4634,9 @@ window.addEventListener('keydown',function(e){
   if(DLG&&(k==="enter"||k===" ")){ e.preventDefault(); dlgNext(); return; }
   if(k==="m"){ toggleSound(); return; }
   if(/^[0-9]$/.test(k)){ S.seq=((S.seq||"")+k).slice(-4); if(S.seq==="1212"&&S.scene!=="fight"){ S.seq=""; tryCheat("1212"); } }
-  var m=KEYMAP[k]; if(m){ e.preventDefault(); IN[m]=1; if(m==="jump") IN.hold=1; }
+  var m=KEYMAP[k]; if(m){ e.preventDefault(); IN[m]=1; if(m==="jump") IN.hold=1;
+    if((m==="left"||m==="right")&&!e.repeat){ var nowT=Date.now();
+      if(S.lastTap&&S.lastTap.m===m&&nowT-S.lastTap.t<240) IN.dash=1; S.lastTap={m:m,t:nowT}; } }
   if(k==="enter"&&S.scene!=="fight"&&S.scene!=="vs"&&S.scene!=="dialog"&&S.scene!=="end"){
     if(S.scene==="title")setScene("select"); else startFight(); }
 });
