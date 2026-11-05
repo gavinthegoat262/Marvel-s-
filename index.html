@@ -676,9 +676,9 @@ bastion:{
 goliath:{
  name:"GOLIATH", rar:"rare", boostPrice:2500, sc:1.5, bulk:1.45, headLift:3, tag:"Nine feet of green rage. Smashes first.",
  hp:300, spd:1.35, light:30, lightRange:52, lightCd:30, hitFrame:9,
- sp:"CRUSHING KICK", spDmg:65, spCost:50, guard:.32,
- atkLbl:"PUNCH", spLbl:"KICK",
- note:"Biggest and toughest — 300 HP of green muscle. Punch 30, flying kick 65 and Vorak goes flying.",
+ sp:"GROUND POUND", spDmg:70, spCost:50, guard:.32,
+ atkLbl:"PUNCH", spLbl:"POUND",
+ note:"Biggest and toughest — 300 HP. Punch 30. GROUND POUND: both fists overhead, then down into the ground for 70 and a spray of dirt and shockwaves.",
  pal:{o:"#071005",d:"#2c5214",m:"#4f8a22",l:"#77b83a",a1:"#3a2066",a2:"#5b3596",g:"#ffe14a"}}
 };
 var RARITY={
@@ -779,6 +779,10 @@ function heroPose(f){
     else if(f.id==="nightclaw"){ P.aa=[1.5,0.2]; P.ab=[1.35,0.25]; P.lean=3; P.la=[0.6,0.2]; }
     else if(f.id==="eater"){ P.aa=[1.45,0.05]; P.ab=[1.3,0.1]; P.lean=1; }
     else if(f.id==="maw"){ P.aa=[-1.9,0.4]; P.ab=[-2.1,0.4]; P.la=[0.7,0.5]; P.lb=[-0.6,0.8]; P.lean=2; }
+    else if(f.id==="goliath"){
+      if(f.t<14){ var up=Math.min(1,f.t/10); P.aa=[0.3+up*2.75,0.15]; P.ab=[0.2+up*2.7,0.2]; P.lean=-2*up; P.crouch=0; }
+      else if(f.t<34){ P.aa=[0.75,-0.15]; P.ab=[0.65,-0.1]; P.lean=6; P.crouch=3; P.la=[0.55,0.6]; P.lb=[-0.55,0.5]; }
+      else { P.aa=[0.6,0.3]; P.ab=[0.4,0.3]; P.lean=2; P.crouch=1; } }
     else { // flying kick
       P.aa=[-1.1,0.5]; P.ab=[-1.6,0.4];
       P.la=[1.45,0.05]; P.lb=[-0.5,1.1]; P.lean=2;
@@ -872,7 +876,7 @@ function drawHero(f){
       }
     });
   }
-  if(f.id==="goliath"&&f.st==="special"&&f.t>8){
+  if(false&&f.id==="goliath"&&f.st==="special"&&f.t>8){
     disc(ff.x+dir*3*sc,ff.y,6*sc,CC(p.a1)); disc(ff.x+dir*3*sc,ff.y,4*sc,"#ffe14a");
   }
 
@@ -2751,7 +2755,7 @@ function updHero(){
       callout(c.ability+" UP",900); beep(520,.12,"triangle",.07,880);
       ring(h.x,h.fy-20,"#ffd23f");
     }
-    if(IN.atk&&h.cd===0&&!IN.block&&h.id==="ironclad"&&h.z>24){
+    if(IN.atk&&h.cd===0&&!IN.block&&h.id==="ironclad"&&h.z>24&&!h.onPlat){
       var dt=TGT(), gx=(dt&&dt.hp>0)?dt.x-h.dir*10:h.x+h.dir*60;
       h.st="dive"; h.t=0; h.vz=-6.5; h.diveVx=Math.max(-8,Math.min(8,(gx-h.x)/Math.max(6,h.z/7.5)));
       h.dir=(gx>=h.x)?1:-1; callout("DIVE!",500); SFX.zap(); IN.atk=0; }
@@ -2772,6 +2776,7 @@ function updHero(){
     var thrusting = IN.hold && h.stam>0 && h.z>1 && h.z<ceil && h.st!=="hurt" && h.st!=="ko" && h.st!=="dive" && h.st!=="slamland";
     if(thrusting){
       h.vz=Math.min(h.vz+0.6,3.4); h.stam-=(c.flyDrain||1.15); h.flying=true;
+      if(h.id==="ironclad"&&h.z>40&&!S.taught.dive){ S.taught.dive=1; callout("PRESS ATTACK IN THE AIR TO DIVE SLAM",1800); }
       if(S.frames%2===0){ spark(h.x-h.dir*2,h.fy-3,1,"#ffb03a",1.6,-1.2);
         if(S.frames%8===0) beep(180,.05,"sawtooth",.03,120); }
     } else { h.flying=false; }
@@ -2922,6 +2927,22 @@ function runSpecial(h){
       ring(b.x,b.fy-60,"#ffd400"); spark(b.x,b.fy-70,20,"#ffd400",8,5); }
     if(t>=12&&t<26) spark(h.x,h.fy+2,2,"#ffb347",2,1);
     if(t>36){h.st="idle";h.t=0;h.spStage=0;}
+  } else if(h.id==="goliath"){
+    var gsc=h.sc||h.c.sc, gx=h.x+h.dir*16*gsc;
+    if(t===14){
+      SFX.big(); setTimeout(function(){ SFX.big(); },60); shake(16); flashScreen(.3);
+      ring(gx,GROUND,"#a89a80"); ring(gx,GROUND-6,"#79c74e");
+      /* dirt and rocks thrown up out of the ground */
+      for(var dq=0;dq<26;dq++) S.fx.push({x:gx+(Math.random()-.5)*36,y:GROUND-3,vx:(Math.random()-.5)*7,
+        vy:-2.5-Math.random()*6.5,g:.3,life:36+Math.random()*24,c:["#6a4a26","#8a6234","#4a3a22","#a89a80"][dq%4],s:dq%3?3:4});
+      spark(gx,GROUND-4,14,"#cfc3b0",7,3);
+      S.crater={x:gx,life:160};
+      S.shots.push({x:gx,y:GROUND-10,vx:h.dir*5.2,kind:"quake",dmg:22,life:80});
+      S.shots.push({x:gx,y:GROUND-10,vx:-h.dir*5.2,kind:"quake",dmg:22,life:60});
+      hitSentries(gx,60,h.c.spDmg);
+      if(b.hp>0&&Math.abs(b.x-gx)<tgtHalf()+46&&(b.z||0)<30) damageBoss(h.c.spDmg,4.5);
+    }
+    if(t>40){h.st="idle";h.t=0;}
   } else if(h.id==="weaver"){
     if(t===10){ S.shots.push({x:h.x+h.dir*18,y:h.fy-38,vx:h.dir*6.2,kind:"webbig",dmg:h.c.spDmg,life:160});
       SFX.zap(); shake(4); }
