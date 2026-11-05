@@ -572,10 +572,10 @@ vorak:{"1":"#1d1030","2":"#7b4fa8","3":"#b07fd6","4":"#d8b6f0","7":"#ffffff"}
 var CHARS={
 ironclad:{
  name:"IRONCLAD", rar:"common", boostPrice:1000, sc:1, tag:"Sealed powered armour, terrible attitude.",
- hp:250, spd:1.75, light:20, lightRange:44, lightCd:20, hitFrame:6, fly:true, stam:100,
+ hp:250, spd:1.75, light:20, lightRange:44, lightCd:20, hitFrame:6, fly:true, stam:100, flyDrain:0.53,
  sp:"PLASMA BEAM", spDmg:90, spCost:50, guard:.30,
  atkLbl:"PUNCH", spLbl:"BEAM",
- note:"Armoured pilot, not a drone. Punch 20, plasma beam 90, and he can fly — hold JUMP until the thruster bar runs dry.",
+ note:"Armoured pilot, not a drone. Punch 20, plasma beam 90. Flies far longer than anyone — hold JUMP to stay up, and press ATTACK while high in the air to dive and slam for 42.",
  pal:{o:"#120a12",d:"#7c1a18",m:"#d8322c",l:"#f26b4e",a1:"#a97c12",a2:"#f6c944",g:"#ffe680"}},
 vanguard:{
  name:"VANGUARD", rar:"common", boostPrice:1000, sc:1, tag:"Holds the line so nobody else has to.",
@@ -778,6 +778,8 @@ function heroPose(f){
       P.aa=[-1.1,0.5]; P.ab=[-1.6,0.4];
       P.la=[1.45,0.05]; P.lb=[-0.5,1.1]; P.lean=2;
     }
+  } else if(st==="dive"){ P.aa=[0.75,0.05]; P.ab=[-0.6,0.4]; P.lean=6; P.la=[-1.1,0.4]; P.lb=[-1.45,0.5];
+  } else if(st==="slamland"){ P.aa=[0.35,0.1]; P.ab=[-0.5,0.6]; P.lean=5; P.crouch=3; P.la=[0.6,0.6]; P.lb=[-0.5,0.4];
   } else if(st==="hurt"){ P.lean=-3; P.aa=[-0.9,0.6]; P.ab=[-1.2,0.5]; P.la=[-0.3,0.2]; P.lb=[0.35,0.3]; }
   else if(st==="block"){ P.aa=[0.95,-1.45]; P.ab=[0.2,0.6]; P.lean=-1; P.crouch=1;
     P.la=[0.25,0.25]; P.lb=[-0.3,0.3];
@@ -785,7 +787,8 @@ function heroPose(f){
     if(f.id==="vanguard"){ P.aa=[1.35,0.95]; P.ab=[0.55,0.45]; P.lean=-2; P.crouch=2;
       P.la=[0.4,0.35]; P.lb=[-0.45,0.4]; }
     /* Ironclad: forearm raised across in front of his head */
-    if(f.id==="ironclad"){ P.aa=[1.45,1.3]; P.ab=[0.3,0.9]; P.lean=-1; P.crouch=1; } }
+    if(f.id==="ironclad"){ P.aa=[1.45,1.3]; P.ab=[0.3,0.9]; P.lean=-1; P.crouch=1; }
+    if(f.id==="goliath"){ P.aa=[2.05,1.25]; P.ab=[1.9,1.35]; P.lean=-2; P.crouch=2; } }
   return P;
 }
 
@@ -2611,6 +2614,17 @@ function damageHero(amount,knock,unblockable){
   S.combo=0; popNum(h.x,h.fy-60,amount,blk?"#9fd8ff":"#ff6b7d"); shake(blk?3:8);
   if(h.hp<=0){ h.hp=0; h.st="ko"; if(S.mode==="pvp") pvpKO(); else if(S.mode==="coop") coopKO(); else endGame(false); }
 }
+/* Ironclad hits the ground fist-first: damage around the landing spot */
+function diveImpact(h){
+  h.st="slamland"; h.t=0; h.cd=Math.max(h.cd,36);
+  var b=TGT(), reach=(tgtHalf()+34);
+  shake(11); flashScreen(.25); SFX.big();
+  ring(h.x+h.dir*8,GROUND,"#ffb03a"); ring(h.x+h.dir*8,GROUND-6,"#fff4c2");
+  spark(h.x+h.dir*8,GROUND-4,20,"#ffb03a",8,4); spark(h.x+h.dir*8,GROUND-4,10,"#a89a80",6,3);
+  S.crater={x:h.x+h.dir*8,life:120};
+  hitSentries(h.x,50,40);
+  if(b&&b.hp>0&&Math.abs(b.x-h.x)<reach&&(b.z||0)<30) damageBoss(42,4.5);
+}
 function updHero(){
   var h=S.hero,c=h.c,sc=h.sc||c.sc;
   if(h.cd>0)h.cd--; if(h.inv>0)h.inv--; if(h.flash>0)h.flash--;
@@ -2630,6 +2644,10 @@ function updHero(){
       callout(c.ability+" UP",900); beep(520,.12,"triangle",.07,880);
       ring(h.x,h.fy-20,"#ffd23f");
     }
+    if(IN.atk&&h.cd===0&&!IN.block&&h.id==="ironclad"&&h.z>24){
+      var dt=TGT(), gx=(dt&&dt.hp>0)?dt.x-h.dir*10:h.x+h.dir*60;
+      h.st="dive"; h.t=0; h.vz=-6.5; h.diveVx=Math.max(-8,Math.min(8,(gx-h.x)/Math.max(6,h.z/7.5)));
+      h.dir=(gx>=h.x)?1:-1; callout("DIVE!",500); SFX.zap(); IN.atk=0; }
     if(IN.atk&&h.cd===0&&!IN.block){ h.st="attack"; h.t=0; h.cd=c.lightCd;
       if(h.id==="nightclaw") h.kick=!h.kick;
       if(h.id==="maw"||h.id==="bastion") h.cyc=((h.cyc||0)+1)%3; }
@@ -2644,9 +2662,9 @@ function updHero(){
   if(c.fly){
     if(h.stam===undefined) h.stam=c.stam;
     var ceil=Math.min(150,GROUND-64);
-    var thrusting = IN.hold && h.stam>0 && h.z>1 && h.z<ceil && h.st!=="hurt" && h.st!=="ko";
+    var thrusting = IN.hold && h.stam>0 && h.z>1 && h.z<ceil && h.st!=="hurt" && h.st!=="ko" && h.st!=="dive" && h.st!=="slamland";
     if(thrusting){
-      h.vz=Math.min(h.vz+0.6,3.4); h.stam-=1.15; h.flying=true;
+      h.vz=Math.min(h.vz+0.6,3.4); h.stam-=(c.flyDrain||1.15); h.flying=true;
       if(S.frames%2===0){ spark(h.x-h.dir*2,h.fy-3,1,"#ffb03a",1.6,-1.2);
         if(S.frames%8===0) beep(180,.05,"sawtooth",.03,120); }
     } else { h.flying=false; }
@@ -2675,8 +2693,14 @@ function updHero(){
     if(h.t>c.hitFrame+10){h.st="idle";h.t=0;}
   }
   if(h.st==="special") runSpecial(h);
+  if(h.st==="dive"){
+    h.vz=Math.min(h.vz,-6.5)-0.35; h.x+=h.diveVx;
+    if(S.frames%2===0) spark(h.x-h.diveVx*2,h.fy-h.R.headTop*0.5,2,"#ffb03a",1.5,-0.5);
+  }
+  if(h.st==="slamland"&&h.t>18){ h.st="idle"; h.t=0; }
 
-  h.vz-=0.33; h.z+=h.vz; if(h.z<=0){h.z=0;h.vz=0;}
+  h.vz-=0.33; h.z+=h.vz; if(h.z<=0){h.z=0;h.vz=0;
+    if(h.st==="dive") diveImpact(h); }
   if(h.knock){ h.x+=h.knock; h.knock*=.86; if(Math.abs(h.knock)<.15)h.knock=0; }
   h.x=Math.max(18,Math.min(WORLDW-18,h.x));
   var b2=TGT(), sep=tgtHalf()+12*sc;
