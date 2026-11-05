@@ -68,6 +68,7 @@ canvas#cv{position:absolute;inset:0;width:100%;height:100%;display:block;
 #bBlock{right:96px;bottom:84px;width:62px;height:62px;background:rgba(60,50,110,.6)}
 #bAbil{right:158px;bottom:44px;width:60px;height:60px;background:rgba(20,120,95,.62)}
 #bAbil.off{opacity:.4}
+#bCtx{right:14px;bottom:158px;width:62px;height:62px;background:rgba(220,170,40,.75)}
 #bDash{right:166px;bottom:2px;width:54px;height:54px;background:rgba(40,140,120,.62)}
 #btnExitTrain{position:fixed;left:8px;top:64px;z-index:20;display:none}
 #bDoor{right:170px;bottom:118px;width:58px;height:58px;background:rgba(160,110,30,.7)}
@@ -201,6 +202,7 @@ button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
   <div id="ctl">
     <div id="stick"><div id="knob"></div><div class="lbl">MOVE · PUSH UP TO JUMP</div></div>
     <div id="btns">
+      <button class="rb" id="bCtx" style="display:none"><span>▲</span><em id="ctxLbl">SWING</em></button>
       <button class="rb" id="bDash"><span>»</span><em>DASH</em></button>
       <button class="rb" id="bDoor" style="display:none"><span>🚪</span><em>DOOR</em></button>
       <button class="rb" id="bAbil" style="display:none"><span>✦</span><em id="abLbl">AEGIS</em></button>
@@ -787,6 +789,8 @@ function heroPose(f){
       P.aa=[-1.1,0.5]; P.ab=[-1.6,0.4];
       P.la=[1.45,0.05]; P.lb=[-0.5,1.1]; P.lean=2;
     }
+  } else if(st==="climb"){ var cl=Math.sin(S.frames*0.25);
+    P.aa=[2.7+cl*0.3,0.3]; P.ab=[2.7-cl*0.3,0.3]; P.la=[0.6+cl*0.4,0.8]; P.lb=[0.6-cl*0.4,0.8]; P.lean=0;
   } else if(st==="swing"){ P.aa=[2.9,0.1]; P.ab=[2.4,0.4]; P.la=[0.5,0.5]; P.lb=[-0.4,0.7];
     P.lean=Math.max(-4,Math.min(4,Math.round((f.vx||0)*f.dir*0.8)));
   } else if(st==="dive"){ P.aa=[0.75,0.05]; P.ab=[-0.6,0.4]; P.lean=6; P.la=[-1.1,0.4]; P.lb=[-1.45,0.5];
@@ -1380,7 +1384,7 @@ var DUN=null, TORCH=[];
 function rnd(a,b){ var s=Math.sin(a*127.1+b*311.7)*43758.5453; return s-Math.floor(s); }
 var MAPS={dungeon:{name:"DUNGEON",price:0},meadow:{name:"MEADOW",price:0},wasteland:{name:"DEAD LANDS",price:0},town:{name:"TOWN",price:0},palace:{name:"GOLDEN PALACE",price:5000}};
 function buildMap(){
-  buildPlats(); buildAnchors();
+  buildPlats(); buildAnchors(); buildStructs();
   if(S.room){ buildRoom(); return; }
   if(S.map==="meadow") buildMeadow();
   else if(S.map==="wasteland") buildWasteland();
@@ -1901,7 +1905,7 @@ function drawBG(){
     }
     G.globalAlpha=.30; px(0,0,WW,30,"#000"); px(0,WH-30,WW,30,"#000"); G.globalAlpha=1;
   }
-  drawAtmos(); drawDoor(); drawAnchors(); drawPlats(); drawAmbient();
+  drawAtmos(); drawStructs(); drawDoor(); drawAnchors(); drawPlats(); drawAmbient();
 }
 
 /* ================= story mode ================= */
@@ -2298,7 +2302,7 @@ function secretHit(){
   S.secretHits=(S.secretHits||0)+1;
   var x=doorX(); shake(3); SFX.guard();
   spark(x,GROUND-30,8,"#a89a80",4,2);
-  if(S.secretHits>=3){
+  if(S.secretHits>=2){
     S.secretOpen=1; shake(8); SFX.big(); flashScreen(.25);
     for(var r=0;r<18;r++) S.fx.push({x:x+(Math.random()-.5)*26,y:GROUND-20-Math.random()*40,vx:(Math.random()-.5)*6,
       vy:-1-Math.random()*4,g:.3,life:40+Math.random()*20,c:r%2?"#6a5a48":"#a89a80",s:3});
@@ -2342,7 +2346,11 @@ function drawSecret(){
     if(hits>=1){ px(x-10,top+20,2,18,cr[1]); px(x-8,top+36,10,2,cr[1]); }
     if(hits>=2){ px(x+6,top+30,2,22,cr[2]); px(x-14,top+48,12,2,cr[2]); }
   }
-  /* a faint glint or a puff of dust now and then: the only clue */
+  /* a glowing outline, and a label once you're getting close */
+  if(!open){ G.globalAlpha=.25+Math.sin(t*0.12)*0.15; px(x-22,top-6,44,2,"#ffd23f"); px(x-22,top+58,44,2,"#ffd23f");
+    px(x-22,top-6,2,66,"#ffd23f"); px(x+20,top-6,2,66,"#ffd23f"); G.globalAlpha=1;
+    var hh=S.hero; if(hh&&Math.abs(hh.x-x)<170){ G.font="6px 'Press Start 2P',monospace"; G.textAlign="center";
+      var lb=SECRETNAME[m]+" · HIT TO OPEN"; G.fillStyle="#000"; G.fillText(lb,x+1,top-11); G.fillStyle="#ffd23f"; G.fillText(lb,x,top-12); } }
   if(!open&&(t%300)<8){ G.globalAlpha=.7; px(x-6+((t/300|0)*13)%12,top+10+((t/300|0)*7)%30,2,2,"#ffffff"); G.globalAlpha=1; }
   if(!open&&(t%420)>400) px(x-4+Math.random()*8,top+60-(t%420-400)*2,2,2,"#a89a80");
 }
@@ -2450,6 +2458,119 @@ function drawAtmos(){
     for(var lg=0;lg<TORCH.length;lg++){ G.globalAlpha=0.07+Math.sin(t*0.1+lg)*0.02; disc(TORCH[lg].x,GROUND,40,"#ffb347"); }
     G.globalAlpha=1;
   }
+}
+
+/* ================= climbable structures ================= */
+/* Two per map: houses, trees, towers, spires, columns, crate stacks.
+   Some heroes can climb them and stand on top. The boss wears them down
+   just by fighting near them, and his slams knock chunks off, until they
+   collapse into rubble. */
+var STRUCTS=[], CLIMBERS={weaver:1,goliath:1,ironclad:1};
+function buildStructs(){
+  var W=WORLDW, key=S.room?"room":S.map, top=Math.max(80,Math.min(150,GROUND-50));
+  STRUCTS=[0.31,0.67].map(function(f,i){
+    var w=(key==="meadow")?44:(key==="palace"?40:60), h=Math.round(top*(i?0.92:1));
+    var s={x0:Math.round(W*f-w/2),x1:Math.round(W*f+w/2),maxh:h,h:h,hp:220,maxhp:220,key:key,i:i,dust:0};
+    s.roof={x0:s.x0+2,x1:s.x1-2,z:h,st:s};
+    return s;
+  });
+}
+function liveStructs(){ return STRUCTS.filter(function(s){ return s.hp>0; }); }
+/* every surface you can land on: floating platforms and standing rooftops */
+function surfaces(){ return PLATS.concat(liveStructs().map(function(s){ return s.roof; })); }
+function hurtStruct(s,amt){
+  if(s.hp<=0) return;
+  s.hp-=amt;
+  s.h=Math.max(16,Math.round(s.maxh*(0.35+0.65*Math.max(0,s.hp)/s.maxhp)));
+  s.roof.z=s.h;
+  if(amt>=10){ spark((s.x0+s.x1)/2,GROUND-s.h,8,"#a89a80",4,2); }
+  if(s.hp<=0){
+    s.hp=0; s.h=0; s.roof.z=0;
+    var cx=(s.x0+s.x1)/2; shake(10); SFX.big();
+    for(var r=0;r<26;r++) S.fx.push({x:cx+(Math.random()-.5)*(s.x1-s.x0),y:GROUND-20-Math.random()*s.maxh*0.6,
+      vx:(Math.random()-.5)*5,vy:-1-Math.random()*4,g:.3,life:40+Math.random()*30,c:r%2?"#6a5a48":"#a89a80",s:4});
+    callout("IT'S COMING DOWN!",900);
+    var h=S.hero; if(h&&(h.onPlat===s.roof||h.clS===s)){ h.onPlat=null; h.clS=null; if(h.st==="climb") h.st="idle"; h.vz=1; }
+  }
+}
+/* the boss erodes whatever he's standing next to, and his big hits land on structures too */
+function updStructs(){
+  var b=S.boss; if(!b||b.hp<=0||S.mode==="pvp") return;
+  liveStructs().forEach(function(s){
+    if(Math.abs(b.x-(s.x0+s.x1)/2)<90){ hurtStruct(s,0.06); if(S.frames%40===0) spark(s.x0+Math.random()*(s.x1-s.x0),GROUND-s.h,3,"#a89a80",2,1); }
+  });
+}
+function quakeStructs(x,amt){ liveStructs().forEach(function(s){ if(Math.abs(x-(s.x0+s.x1)/2)<110) hurtStruct(s,amt); }); }
+function structAt(h){
+  var L=liveStructs();
+  for(var i=0;i<L.length;i++){ var s=L[i]; if(h.x>=s.x0-6&&h.x<=s.x1+6&&h.z<s.h-8) return s; }
+  return null;
+}
+function startClimb(h,s){ h.st="climb"; h.t=0; h.clS=s; h.vz=0; h.onPlat=null; SFX.jump(); }
+function updClimb(h){
+  var s=h.clS;
+  if(!s||s.hp<=0){ h.st="idle"; h.clS=null; return; }
+  var sp=(h.id==="goliath")?1.5:2;
+  if(IN.hold) h.z+=sp; else h.z=Math.max(0,h.z-0.6);
+  h.x=Math.max(s.x0-4,Math.min(s.x1+4,h.x));
+  if(h.z>=s.h){ h.z=s.h; h.st="idle"; h.t=0; h.clS=null; h.onPlat=s.roof; h.jumps=0; callout("ON TOP",500); }
+  else if(h.clRel){ h.st="idle"; h.clS=null; h.vz=5.5; h.vx=(h.x<(s.x0+s.x1)/2?-1:1)*3; SFX.jump(); }
+  else if(h.z<=0){ h.st="idle"; h.clS=null; }
+  h.clRel=0; h.fy=GROUND-h.z;
+}
+function drawStructs(){
+  var t=S.frames;
+  STRUCTS.forEach(function(s){
+    var cx=(s.x0+s.x1)/2, w=s.x1-s.x0;
+    if(s.hp<=0){ /* rubble */
+      for(var r=0;r<7;r++) px(s.x0-6+r*((w+12)/7),GROUND-6-((r*5)%7),(w+12)/6,6+((r*5)%7),r%2?"#4a4038":"#6a5a48");
+      return; }
+    var y=GROUND-s.h, dmg=1-s.hp/s.maxhp, k=s.key;
+    if(k==="town"){
+      px(s.x0-1,y,w+2,s.h,"#1a0e08"); px(s.x0,y,w,s.h,"#7a3a2a");
+      for(var by=y+4;by<GROUND;by+=8) px(s.x0,by,w,1,"#5a2a1e");
+      for(var wy=y+12;wy<GROUND-20;wy+=26) for(var wx=s.x0+8;wx<s.x1-10;wx+=20){ px(wx,wy,10,12,"#2a1a10"); px(wx+1,wy+1,8,10,(t+wx)%300<280?"#ffd27a":"#c8a050"); }
+      if(dmg<0.35){ px(s.x0-6,y-2,w+12,6,"#4a2e18"); px(s.x0-2,y-8,w+4,6,"#6a4420"); }
+      px(cx-6,GROUND-20,12,20,"#3a2414");
+    } else if(k==="meadow"){
+      px(cx-8,y+16,16,s.h-16,"#4a3020"); px(cx-8,y+16,4,s.h-16,"#6a4a2a");
+      disc(cx,y+6,26-dmg*10,"#2f6a24"); disc(cx-14,y+16,16-dmg*6,"#3f7a2e"); disc(cx+14,y+14,17-dmg*6,"#3f7a2e");
+      px(cx-24,y,48,4,"#3a2814");
+    } else if(k==="palace"){
+      px(s.x0,y,w,s.h,"#d8d0c0"); px(s.x0,y,6,s.h,"#ffffff"); px(s.x1-5,y,5,s.h,"#b8b0a0");
+      px(s.x0-6,y,w+12,8,"#e0c256"); px(s.x0-4,GROUND-10,w+8,10,"#c8c0b0");
+    } else if(k==="wasteland"){
+      for(var sy=y;sy<GROUND;sy+=6){ var ww=w*(0.6+0.4*(sy-y)/s.h); px(cx-ww/2,sy,ww,6,((sy/6)|0)%2?"#5a4434":"#6a5444"); }
+      px(s.x0+4,y,w-8,4,"#7a6454");
+    } else if(k==="room"){
+      for(var cy=GROUND-20;cy>y-1;cy-=20){ px(s.x0,cy,w,20,"#5a3a1a"); px(s.x0,cy,w,3,"#7a5228"); px(s.x0+w/2-1,cy,2,20,"#3a2410"); }
+    } else {
+      for(var ty=y;ty<GROUND;ty+=11){ var off=((ty/11)|0)%2?8:0;
+        for(var tx=s.x0-off;tx<s.x1;tx+=16) px(Math.max(s.x0,tx)+1,ty+1,Math.min(15,s.x1-Math.max(s.x0,tx)-1),9,(tx+ty)%3?"#3a2c46":"#2f2440"); }
+      px(s.x0-3,y-4,w+6,5,"#54425f");
+    }
+    /* damage: a jagged broken top and spreading cracks */
+    if(dmg>0.15){ for(var j=0;j<w;j+=6) px(s.x0+j,y-((j*7)%5),6,3+((j*7)%5),"#120a10"); }
+    if(dmg>0.3) { px(cx-2,y+10,2,s.h*0.3,"#120a10"); px(cx,y+10+s.h*0.3,8,2,"#120a10"); }
+    if(dmg>0.6) { px(s.x0+6,y+s.h*0.4,2,s.h*0.35,"#120a10"); px(s.x1-10,y+s.h*0.2,2,s.h*0.4,"#120a10"); }
+    var h=S.hero;
+    if(h&&CLIMBERS[h.id]&&h.st!=="climb"&&h.x>=s.x0-6&&h.x<=s.x1+6&&h.z<s.h-8){
+      G.font="6px 'Press Start 2P',monospace"; G.textAlign="center";
+      G.fillStyle="#000"; G.fillText("▲ CLIMB",cx+1,y-9); G.fillStyle="#fff"; G.fillText("▲ CLIMB",cx,y-10); }
+  });
+}
+/* one context button for touch screens: SWING or CLIMB when either is possible */
+var ctxOn="";
+function updCtxBtn(){
+  var h=S.hero, lab="";
+  if(h&&S.scene==="fight"&&h.hp>0){
+    if(h.st==="swing") lab="LET GO";
+    else if(h.st==="climb") lab="CLIMB";
+    else if(CLIMBERS[h.id]&&structAt(h)) lab="CLIMB";
+    else if(h.id==="weaver"&&nearAnchor(h)) lab="SWING";
+  }
+  if(lab!==ctxOn){ ctxOn=lab; var el=document.getElementById('bCtx');
+    el.style.display=lab?"":"none"; document.getElementById('ctxLbl').textContent=lab; }
 }
 
 /* ================= doors & rooms ================= */
@@ -2900,6 +3021,7 @@ function updHero(){
     if(!IN.block&&!dashing){ var mv=mvd;
       if(mv!==0){ h.x+=mv*c.spd*1.12*((h.netSlow>0)?0.5:1); h.st="walk"; } }
     if(IN.jump&&IN.block&&h.onPlat){ h.onPlat=null; h.dropT=14; h.vz=-1.5; }
+    else if(IN.jump&&CLIMBERS[h.id]&&!h.onPlat&&structAt(h)){ startClimb(h,structAt(h)); }
     else if(IN.jump&&(h.z===0||h.onPlat||h.coy>0)){ h.vz=7.4; h.onPlat=null; h.coy=0; SFX.jump(); spark(h.x,h.fy,4,"#cfc3b0",2,1); }
     else if(IN.jump&&h.id==="weaver"&&nearAnchor(h)){ startSwing(h,nearAnchor(h)); }
     else if(IN.jump&&!c.fly&&h.z>3&&!(h.jumps>0)){ h.jumps=1; h.vz=6.6; SFX.jump(); ring(h.x,h.fy,"#cfe8ff"); }
@@ -2919,6 +3041,7 @@ function updHero(){
       h.en-=c.spCost; callout(c.sp,800); SFX.zap(); }
   }
   if(h.st==="swing"&&(IN.jump||IN.atk)) h.swRel=1;
+  if(h.st==="climb"&&(IN.atk||IN.dash)) h.clRel=1;
   IN.atk=0; IN.spec=0; IN.jump=0; IN.abil=0; IN.dash=0;
   if(h.abilCd>0)h.abilCd--;
   if(h.buff>0)h.buff--;
@@ -2967,16 +3090,16 @@ function updHero(){
   }
   if(h.st==="slamland"&&h.t>18){ h.st="idle"; h.t=0; }
 
-  if(h.st==="swing") updSwing(h); else {
+  if(h.st==="swing") updSwing(h); else if(h.st==="climb") updClimb(h); else {
   /* rise at the old rate, fall faster, and let go of jump early for a short hop */
   var z0=h.z, gv=(h.vz<0)?0.46:0.33;
   if(h.vz>0&&!IN.hold&&!c.fly&&h.st!=="special"&&h.st!=="dive") gv=0.62;
   if(h.onPlat&&(h.x<h.onPlat.x0-3||h.x>h.onPlat.x1+3||h.vz>0)){ if(h.vz<=0) h.coy=6; h.onPlat=null; }
   if(h.onPlat){ h.z=h.onPlat.z; h.vz=0; }
   else { h.vz-=gv; h.z+=h.vz;
-    if(h.vz<0&&!(h.dropT>0)) for(var pi=0;pi<PLATS.length;pi++){ var pl=PLATS[pi];
+    if(h.vz<0&&!(h.dropT>0)){ var SF=surfaces(); for(var pi=0;pi<SF.length;pi++){ var pl=SF[pi];
       if(h.x>=pl.x0&&h.x<=pl.x1&&z0>=pl.z&&h.z<=pl.z){ h.z=pl.z; h.vz=0; h.onPlat=pl; h.jumps=0; h.airDash=0; h.flewAir=0;
-        if(h.st==="dive") diveImpact(h); break; } } }
+        if(h.st==="dive") diveImpact(h); break; } } } }
   if(h.dropT>0) h.dropT--;
   if(h.coy>0) h.coy--;
   if(h.z<=0){h.z=0;h.vz=0; h.jumps=0; h.airDash=0; h.flewAir=0;
@@ -3207,7 +3330,9 @@ function updBoss(){
 }
 function fireAttack(kind){
   var b=S.boss,h=S.hero,def=b.def||BOSSDEF.vorak;
-  if(kind==="slam"||kind==="leapland") quakePlats(b.x);
+  if(kind==="slam"||kind==="leapland"){ quakePlats(b.x); quakeStructs(b.x,kind==="leapland"?55:40); }
+  if(kind==="punch") quakeStructs(b.x+b.dir*40,15);
+  if(kind==="stomp") quakeStructs((b.tel&&b.tel.mark!==undefined)?b.tel.mark:b.x,30);
   if(kind==="stomp") quakePlats((b.tel&&b.tel.mark!==undefined)?b.tel.mark:b.x);
   if(kind==="leap"){
     SFX.big(); shake(5);
@@ -4123,7 +4248,7 @@ function step(){ S.frames++; S.maxCombo=Math.max(S.maxCombo||0,S.combo||0);
     if(NET.role==="host"){ updBoss(); if(S.frames%2===0) sendBoss(); } else mirrorBoss();
     updSentries(); coopRevive();
   } else if(S.mode!=="pvp"){ updBoss(); updSentries(); updStory(); }
-  updDoor();
+  updDoor(); updStructs(); updCtxBtn();
   updShots(); updFx(); updCam();
   if(S.shake>0)S.shake*=.82; }
 function titleCast(){
@@ -4250,7 +4375,9 @@ function startFight(){
   refreshIcons();
   elStBar.classList.toggle('on',!!S.hero.c.fly);
   S.pj=0;
-  setScene("fight"); syncHUD(); callout("FIGHT!",900); S.startTime=Date.now(); }
+  setScene("fight"); syncHUD(); callout("FIGHT!",900); S.startTime=Date.now();
+  setTimeout(function(){ if(S.scene==="fight"&&!S.room&&S.hero)
+    callout("HIDDEN ROOM: FIND THE "+SECRETNAME[S.map]+(doorX()>S.hero.x?" →":" ←"),1800); },1500); }
 function endGame(won){
   if(S.scene==="end") return;
   if(S.mode==="story"){ storyEnd(won); return; }
@@ -4780,7 +4907,7 @@ window.addEventListener('pointerup',stickEnd);
 window.addEventListener('pointercancel',stickEnd);
 
 /* action buttons */
-[['bAtk','atk'],['bSpec','spec'],['bJump','jump'],['bBlock','block'],['bAbil','abil'],['bDoor','door'],['bDash','dash']].forEach(function(pair){
+[['bAtk','atk'],['bSpec','spec'],['bJump','jump'],['bBlock','block'],['bAbil','abil'],['bDoor','door'],['bDash','dash'],['bCtx','jump']].forEach(function(pair){
   var el=document.getElementById(pair[0]), k=pair[1];
   function on(e){ e.preventDefault(); e.stopPropagation(); IN[k]=1; if(k==="jump") IN.hold=1; el.classList.add('hot');
     try{ el.setPointerCapture(e.pointerId); }catch(err){} }
