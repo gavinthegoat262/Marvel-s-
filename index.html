@@ -16,6 +16,11 @@
 html,body{margin:0;padding:0;height:100%;overflow:hidden;overscroll-behavior:none;background:var(--bg)}
 body{font-family:"Press Start 2P","Courier New",monospace;color:var(--fg)}
 #wrap{position:fixed;inset:0;background:#0a0710}
+#rotate{position:fixed;inset:0;z-index:200;background:rgba(6,4,14,.96);display:none;flex-direction:column;
+  align-items:center;justify-content:center;gap:16px;text-align:center;padding:24px;color:#efe9ff;font-size:11px;line-height:1.8}
+#rotate .ph{width:46px;height:78px;border:4px solid #ffd23f;border-radius:8px;animation:rot 1.8s ease-in-out infinite}
+@keyframes rot{0%,30%{transform:rotate(0)}60%,100%{transform:rotate(-90deg)}}
+body.tall #callout{font-size:10px;top:12%}
 canvas#cv{position:absolute;inset:0;width:100%;height:100%;display:block;
   image-rendering:pixelated;image-rendering:crisp-edges;touch-action:none}
 #flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none}
@@ -190,6 +195,8 @@ button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
   <button id="btnMute">♪</button>
   <div id="flash"></div>
   <div id="callout"></div>
+  <div id="rotate"><div class="ph"></div><div>TURN YOUR PHONE SIDEWAYS<br><span style="color:#9b92c0">the arena is built for a wide screen</span></div>
+    <button class="small" id="btnRotOk">PLAY ANYWAY</button></div>
 
   <div id="hud">
     <div class="nm" id="heroname">HERO</div>
@@ -2274,6 +2281,7 @@ function fightRank(){
 function startTraining(){
   startFight(); S.training=1;
   S.boss.hp=S.boss.maxhp=99999; S.boss.cd=1e9; S.dmgLog=[];
+  S.boss.def=Object.assign({},S.boss.def,{name:"TRAINING DUMMY"});
   document.getElementById('btnExitTrain').style.display="";
   callout("TRAINING",1100);
 }
@@ -2284,8 +2292,9 @@ function drawTrainHud(){
   S.dmgLog.forEach(function(d){ sum+=d[1]; });
   var cx=(S.cam||0)+WW/2;
   G.font="7px 'Press Start 2P',monospace"; G.textAlign="center";
-  G.fillStyle="#000"; G.fillText("DPS "+Math.round(sum/5)+"  ·  BEST COMBO "+(S.maxCombo||0),cx+1,35);
-  G.fillStyle="#7bffd0"; G.fillText("DPS "+Math.round(sum/5)+"  ·  BEST COMBO "+(S.maxCombo||0),cx,34);
+  G.font="6px 'Press Start 2P',monospace";
+  G.fillStyle="#000"; G.fillText("DPS "+Math.round(sum/5)+"  ·  BEST COMBO "+(S.maxCombo||0),cx+1,GROUND+17);
+  G.fillStyle="#7bffd0"; G.fillText("DPS "+Math.round(sum/5)+"  ·  BEST COMBO "+(S.maxCombo||0),cx,GROUND+16);
 }
 
 /* ================= secret entrances ================= */
@@ -4471,9 +4480,9 @@ function drawCoopHud(){
   var fr=(NET.role==="host")?S.frames:(b.hostFrames||S.frames), left=Math.max(0,Math.ceil((BERSERK_AT-fr)/60));
   var cx=(S.cam||0)+WW/2, txt=b.berserk?"BERSERK!":"BERSERK IN "+Math.floor(left/60)+":"+("0"+left%60).slice(-2);
   G.font="7px 'Press Start 2P',monospace"; G.textAlign="center";
-  G.fillStyle="#000"; G.fillText(txt,cx+1,35);
-  G.fillStyle=b.berserk?((S.frames%20<10)?"#ff3b57":"#ffd23f"):(left<30?"#ff6b7d":"#ffd6ff"); G.fillText(txt,cx,34);
-  if(b.regen&&b.hp>0){ G.fillStyle=(S.frames%30<15)?"#6dff7a":"#b6ffcc"; G.fillText("REGENERATING — HIT HIM!",cx,46); }
+  G.fillStyle="#000"; G.fillText(txt,cx+1,GROUND+17);
+  G.fillStyle=b.berserk?((S.frames%20<10)?"#ff3b57":"#ffd23f"):(left<30?"#ff6b7d":"#ffd6ff"); G.fillText(txt,cx,GROUND+16);
+  if(b.regen&&b.hp>0){ G.fillStyle=(S.frames%30<15)?"#6dff7a":"#b6ffcc"; G.fillText("REGENERATING — HIT HIM!",cx,GROUND+27); }
 }
 function drawRevive(){
   if(S.mode!=="coop"||S.scene!=="fight") return;
@@ -4709,8 +4718,15 @@ function loop(ts){ requestAnimationFrame(loop);
 /* ================= resize ================= */
 function resize(){
   var cw=Math.max(200,window.innerWidth), ch=Math.max(200,window.innerHeight);
+  var tall=ch>cw*1.05;
   UNIT=Math.min(cw/300,ch/210);
   WW=Math.max(300,Math.round(cw/UNIT)); WH=Math.max(210,Math.round(ch/UNIT));
+  if(tall){ WH=Math.round(WW*0.82); var vh=WH*UNIT;
+    CV.style.inset="auto"; CV.style.left="0"; CV.style.width="100%"; CV.style.height=vh+"px";
+    CV.style.top=Math.max(0,Math.round((ch-vh)*0.28))+"px"; }
+  else { CV.style.inset=""; CV.style.left=""; CV.style.width=""; CV.style.height=""; CV.style.top=""; }
+  document.body.classList.toggle('tall',tall);
+  var rt=document.getElementById('rotate'); if(rt) rt.style.display=(tall&&!S.rotOk)?"flex":"none";
   HD=Math.max(2,Math.min(4,Math.round(UNIT*(window.devicePixelRatio||1))));
   CV.width=WW*HD; CV.height=WH*HD;
   G=CV.getContext('2d'); G.imageSmoothingEnabled=false; G.setTransform(HD,0,0,HD,0,0);
@@ -5184,6 +5200,7 @@ function tryCheat(code){
   callout("BAD CODE",800); beep(150,.2,"square",.05); return false;
 }
 document.getElementById('btnBoost').addEventListener('click',buyBoost);
+document.getElementById('btnRotOk').addEventListener('click',function(){ S.rotOk=1; document.getElementById('rotate').style.display="none"; });
 document.getElementById('btnTrain').addEventListener('click',function(){ if(isLocked(S.pick)){ callout("UNLOCK THIS HERO FIRST",1100); return; } startTraining(); });
 document.getElementById('btnExitTrain').addEventListener('click',function(){ S.training=0; this.style.display="none"; setScene("select"); });
 document.getElementById('btnStory').addEventListener('click',function(){ beep(700,.06,"square",.05); startStory(); });
