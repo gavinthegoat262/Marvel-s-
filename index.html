@@ -2248,7 +2248,7 @@ function drawTrainHud(){
 var SECRETX={dungeon:0.88,meadow:0.07,wasteland:0.92,town:0.09,palace:0.87};
 var SECRETNAME={dungeon:"CRACKED WALL",meadow:"HOLLOW TREE",wasteland:"OLD MINE",town:"CELLAR DOOR",palace:"TAPESTRY"};
 function secretHit(){
-  if(S.room||S.secretOpen) return;
+  if(S.room||S.secretOpen||S.map==="meadow") return;
   S.secretHits=(S.secretHits||0)+1;
   var x=doorX(); shake(3); SFX.guard();
   spark(x,GROUND-30,8,"#a89a80",4,2);
@@ -2261,6 +2261,7 @@ function secretHit(){
 }
 /* what the hidden entrance looks like, closed (with damage) and open */
 function drawSecret(){
+  if(S.map==="meadow") return;
   var x=doorX(), m=S.map, hits=S.secretHits||0, open=!!S.secretOpen, t=S.frames, top=GROUND-58;
   if(open){
     px(x-17,top-2,34,60,"#05030a"); px(x-15,top,30,58,"#0e0818");
@@ -2390,7 +2391,8 @@ function structAt(h){
   for(var i=0;i<L.length;i++){ var s=L[i]; if(h.x>=s.x0-6&&h.x<=s.x1+6&&h.z<s.h-8) return s; }
   return null;
 }
-function startClimb(h,s){ h.st="climb"; h.t=0; h.clS=s; h.vz=0; h.onPlat=null; SFX.jump(); }
+function startClimb(h,s){ h.st="climb"; h.t=0; h.clS=s; h.vz=0; h.onPlat=null; SFX.jump();
+  var mid=(s.x0+s.x1)/2; if(Math.abs(mid-h.x)>2) h.dir=(mid>=h.x)?1:-1; }
 function updClimb(h){
   var s=h.clS;
   if(!s||s.hp<=0){ h.st="idle"; h.clS=null; return; }
@@ -2681,6 +2683,7 @@ var LEDGEKIND={town:"balcony",meadow:"branch",palace:"gilt"};
 var RUBBLE={town:RAMPS.brick,meadow:RAMPS.bark,dungeon:RAMPS.stone,wasteland:RAMPS.rock,palace:RAMPS.marble,room:RAMPS.wood};
 function buildStructs(){
   var W=WORLDW, key=S.room?"room":S.map, H=stageH();
+  if(key==="meadow") H=Math.round(H*1.25);
   STRUCTS=LAYOUT.structX.map(function(f,i){
     var w=(key==="meadow")?50:62, cx=Math.round(W*f), seed=i*97+key.length*13;
     var s={x0:cx-w/2,x1:cx+w/2,maxh:H,h:H,hp:240,maxhp:240,key:key,i:i,inner:i?-1:1,seed:seed};
@@ -2919,29 +2922,73 @@ function clumpPixel(X,Y,C,L,cx,cy,rx,ry,seed){
   if(ex*ex+ey*ey<0.8) return L[ey>0.2?0:1];
   return null;
 }
+/* the big climbable meadow tree, in the same clumped style */
+/* ---- pixel trees, lit from above ----
+   Crowns are a few lumpy lobes, each packed with small clumps. A clump is
+   lit on its top edge and dark underneath, so the crown reads as stacked
+   foliage instead of a shaded ball. Pines are layers of drooping branch
+   sprays with a bright top edge, ragged hanging tips and dark undersides. */
+function makeCrown(cx,cy,rx,ry,seed,size){
+  /* a big top lobe, two shoulders and a lower skirt, jittered per tree */
+  var L=[{x:cx,y:cy-ry*0.35,rx:rx*0.62,ry:ry*0.6},
+         {x:cx-rx*0.42,y:cy+ry*0.02,rx:rx*0.55,ry:ry*0.55},
+         {x:cx+rx*0.44,y:cy-ry*0.04,rx:rx*0.55,ry:ry*0.55},
+         {x:cx-rx*0.1,y:cy+ry*0.42,rx:rx*0.7,ry:ry*0.46}];
+  L.forEach(function(o,i){ o.x+=(hsh(i,31,seed)-0.5)*rx*0.18; o.y+=(hsh(i,32,seed)-0.5)*ry*0.16; });
+  var C=[];
+  L.forEach(function(o,li){
+    var n=Math.max(6,Math.round(o.rx*o.ry/(size*size*0.7)));
+    for(var i=0;i<n;i++){ var a=hsh(i,11+li,seed)*Math.PI*2, r=Math.sqrt(hsh(i,12+li,seed))*0.86;
+      C.push({x:o.x+Math.cos(a)*r*o.rx, y:o.y+Math.sin(a)*r*o.ry, r:size*(0.85+hsh(i,13+li,seed)*0.4), lobe:li}); }
+    var m=Math.round((o.rx+o.ry)*0.7/size)+5;
+    for(var k=0;k<m;k++){ var b=k/m*Math.PI*2; if(Math.sin(b)>0.6&&li!==3) continue;
+      C.push({x:o.x+Math.cos(b)*o.rx*0.86, y:o.y+Math.sin(b)*o.ry*0.86, r:size*(0.8+hsh(k,14+li,seed)*0.3), lobe:li}); }
+  });
+  C.sort(function(p,q){ return p.y-q.y; });
+  C.lobes=L; C.cy=cy; C.ry=ry;
+  return clumpGrid(C);
+}
+function crownPixel(X,Y,C,P,seed,x,y){
+  var list=C.grid[Math.floor(X/C.cell)+","+Math.floor(Y/C.cell)]||[], n=P.length;
+  for(var i=list.length-1;i>=0;i--){ var c=list[i], dx=X-c.x, dy=Y-c.y, d2=dx*dx+dy*dy;
+    if(d2>=c.r*c.r) continue;
+    /* height in the crown sets the base tone: top clumps catch the sun */
+    var hgt=(c.y-(C.cy-C.ry))/(C.ry*2);
+    var base=hgt<0.3?n-2:(hgt<0.62?n-3:n-4);
+    if(dy>c.r*0.3) return P[Math.max(0,base-1)];
+    if(dy<-c.r*0.5) return P[Math.min(n-1,base+1)];
+    if(dy<-c.r*0.1&&hsh(x>>1,y>>1,seed)>0.82) return P[Math.min(n-1,base+1)];
+    return P[base];
+  }
+  for(var j=0;j<C.lobes.length;j++){ var o=C.lobes[j], ex=(X-o.x)/o.rx, ey=(Y-o.y)/o.ry; if(ex*ex+ey*ey<0.72) return P[ey>0.1?0:1]; }
+  return null;
+}
 function makeTree(kind,h,seed,sky,mix){
   var P=TREEPAL[kind], L=shiftPal(P.leaf,sky,mix), T=shiftPal(P.trunk,sky,mix);
-  var w=(kind==="pine")?Math.round(h*0.62):Math.min(84,Math.round(h*0.85)), b=new PixBuf((w+4)*TD,(h+2)*TD,TD), cx=(w+4)/2;
-  /* clumps a few fine pixels across, so a tree carries many of them */
-  var size=Math.max(1.3,Math.min(2.1,h/24));
+  var w=(kind==="pine")?Math.round(h*0.64):Math.min(96,Math.round(h*0.82)), b=new PixBuf((w+6)*TD,(h+2)*TD,TD), cx=(w+6)/2;
+  var size=Math.max(1.5,Math.min(2.4,h/22));
   if(kind==="pine"){
-    var tiers=Math.max(3,Math.round(h/12)), top=1, bot=h*0.86;
+    var tiers=Math.max(4,Math.round(h/10)), top=1, bot=h*0.88, span=(bot-top);
+    var tierH=span/tiers*1.45, period=Math.max(2,size*1.2);
     b.fill(function(X,Y,x,y){
+      var dx=X-cx, ax=Math.abs(dx);
+      /* lowest tier first: lower sprays hang over the ones above */
       for(var t=tiers-1;t>=0;t--){
-        var ty0=top+(bot-top)*t/tiers*0.86, ty1=top+(bot-top)*(t+1)/tiers+2;
-        var half=(w/2-1)*(0.32+0.68*(t+1)/tiers);
-        if(Y<ty0||Y>ty1+2) continue;
-        var k=(Y-ty0)/(ty1-ty0), hw=half*Math.min(1,k*1.05)+0.5;
-        /* drooping, scalloped lower edge made of little clumps */
-        var cw=Math.max(1.5,size*1.2), u=((X-cx+half)%cw+cw)%cw, droop=Math.sqrt(Math.max(0,(cw/2)*(cw/2)-(u-cw/2)*(u-cw/2)))*0.7;
-        if(Math.abs(X-cx)>hw||Y>ty1+droop-1) continue;
-        var side=(X-cx)/Math.max(1,hw);
-        if(Y>ty1+droop-0.9) return L[0];
-        if(side<-0.15){ var hi=(u<cw*0.45&&(Y-ty0)%1.4<0.5); return L[hi?L.length-1:L.length-2]; }
-        if(side<0.35) return L[L.length-3];
-        return L[Math.max(1,L.length-4)];
+        var y0=top+span*t/tiers, y1=y0+tierH, maxw=(w/2-1)*(0.28+0.72*(t+1)/tiers);
+        if(Y<y0||Y>y1+period) continue;
+        var k=(Y-y0)/(y1-y0), hw=maxw*Math.min(1,0.15+0.95*k);
+        var u=((X+seed*0.37)%period+period)%period, tip=Math.abs(u-period/2)/(period/2);
+        var lower=y1-(1-tip)*period*0.9+ax/maxw*period*0.6;
+        if(ax>hw+0.4||Y>lower) continue;
+        var topEdge=y0+Math.max(0,(ax/maxw-0.15)/0.95)*(y1-y0);
+        if(Y-topEdge<1.2) return L[dx<0?L.length-1:L.length-2];
+        if(lower-Y<0.8) return L[0];
+        if(k>0.75&&ax<hw*0.12) return L[1];
+        if(dx<0) return (hsh(x>>1,y,seed)>0.85)?L[L.length-1]:L[L.length-2];
+        return (hsh(x>>1,y,seed)>0.9)?L[L.length-2]:L[Math.max(1,L.length-3)];
       }
-      if(Y>bot-2&&Math.abs(X-cx)<1.6) return T[Math.abs(X-cx)<0.6?T.length-1:1];
+      var tw=1.3+(Y>h-1.5?(Y-(h-1.5))*0.7:0);
+      if(ax<tw&&Y>top+2) return T[dx<-0.3?T.length-1:(dx>0.5?1:Math.max(1,T.length-2))];
       return null;
     });
   } else if(kind==="dead"){
@@ -2950,33 +2997,31 @@ function makeTree(kind,h,seed,sky,mix){
       for(var i=0;i<br.length;i++){ var B=br[i], dx=(X-cx)*B.d; if(dx>0&&dx<B.l&&Math.abs(Y-(B.y-dx*0.6))<0.8) return T[2]; }
       return null; });
   } else {
-    var rx=w/2-1, ry=Math.min(h*0.36,36), ccy=ry+1, C=makeClumps(cx,ccy,rx,ry,seed,size);
+    var rx=w/2-1, ry=Math.min(h*0.34,40), ccy=ry+2, C=makeCrown(cx,ccy,rx,ry,seed,size);
+    var trunkTop=ccy+ry*0.5, tw0=(kind==="birch"?1.5:2+Math.max(0,h-60)/40);
     b.fill(function(X,Y,x,y){
-      var c=clumpPixel(X,Y,C,L,cx,ccy,rx,ry,seed); if(c) return c;
-      /* trunk: bark grain on oaks, black dashes on birch, a little root flare */
-      var tw=(kind==="birch"?1.6:2.2+Math.max(0,h-60)/34)+(Y>h-1.6?(Y-(h-1.6))*0.8:0);
-      if(Math.abs(X-cx)<tw&&Y>ccy){
-        var lx=X-cx;
-        if(kind==="birch"){ if(hsh(y>>1,3,seed)>0.8&&lx<0.8) return T[0]; return lx>0.6?T[1]:(lx<-0.8?T[3]:T[2]); }
-        if((x+Math.round(y*0.2))%5===0) return T[1];
-        return lx<-0.6?T[3]:(lx>0.8?T[1]:T[2]); }
+      var c=crownPixel(X,Y,C,L,seed,x,y); if(c) return c;
+      var lx=X-cx, flare=Y>h-1.5?(Y-(h-1.5))*0.7:0;
+      if(Math.abs(lx)<tw0+flare&&Y>trunkTop){
+        if(kind==="birch"){ if(hsh(y>>1,3,seed)>0.8&&lx<0.6) return T[0]; return lx>0.5?T[1]:(lx<-0.7?T[3]:T[2]); }
+        if((x+(y>>2))%4===0) return T[1];
+        return lx<-tw0*0.4?T[3]:(lx>tw0*0.45?T[1]:T[2]); }
       return null; });
   }
-  var oc=mixC(hexRGB(kind==="birch"||kind==="oak"||kind==="pine"?"#0a1414":"#0a0814"),sky,mix*0.8); b.outline(oc);
-  var cv=b.canvas(); cv.u=TD; cv.gw=(w+4); cv.gh=(h+2); return cv;
+  var oc=mixC(hexRGB("#0a1414"),sky,mix*0.8); b.outline(oc);
+  var cv=b.canvas(); cv.u=TD; cv.gw=(w+6); cv.gh=(h+2); return cv;
 }
-
-/* the big climbable meadow tree, in the same clumped style */
+/* the climbable meadow tree, in the same style */
 function paintTree(w,H,seed){
-  var pad=20, top=4, cw=w+pad*2, b=new PixBuf(cw*TD,(H+top)*TD,TD), R=RAMPS, L=R.leaf, Bk=R.bark;
-  var cx=cw/2, rx=cw/2-8, ry=21, ccy=top+20, C=makeClumps(cx,ccy,rx,ry,seed,1.9);
+  var pad=22, top=2, cw=w+pad*2, b=new PixBuf(cw*TD,(H+top)*TD,TD), R=RAMPS, L=R.leaf, Bk=R.bark;
+  var cx=cw/2, rx=cw/2-2, ry=26, ccy=top+26, C=makeCrown(cx,ccy,rx,ry,seed,2.1);
   b.fill(function(X,Y,x,y){
-    var c=clumpPixel(X,Y,C,L,cx,ccy,rx,ry,seed); if(c){ if(hsh(x>>1,y>>1,seed+5)>0.998) return hexRGB("#d83a2a"); return c; }
-    var by=Y-top, half=6+Math.max(0,(by-(H-10)))*0.9;
-    if(by>18&&Math.abs(X-cx)<half&&by<H){
+    var c=crownPixel(X,Y,C,L,seed,x,y); if(c){ if(hsh(x>>1,y>>1,seed+5)>0.998) return hexRGB("#d83a2a"); return c; }
+    var by=Y-top, half=7+Math.max(0,(by-(H-3)))*0.8;
+    if(by>ccy+8&&Math.abs(X-cx)<half&&by<H){
       var lx=X-cx;
-      if(Math.abs(lx-2)<1.5&&Math.abs(by-46)<2) return Bk[0];
-      if((x+Math.round(y*0.25))%6===0) return Bk[1];
+      if(Math.abs(lx-2)<1.5&&Math.abs(by-(H*0.55))<2) return Bk[0];
+      if((x+(y>>2))%5===0) return Bk[1];
       return lx<-half*0.45?Bk[4]:(lx>half*0.4?Bk[1]:(lx<0?Bk[3]:Bk[2])); }
     return null;
   });
@@ -2999,9 +3044,9 @@ var MLAY=null;
 function buildMeadowLayers(){
   var sky=hexRGB("#9ad8f0");
   MLAY=[
-    makeLayer(0.12,GROUND-40,9,22,34,["pine","pine","oak"],sky,0.62,"#5a9a6a",11),
-    makeLayer(0.3,GROUND-24,15,30,46,["oak","pine","birch","oak"],sky,0.38,"#3f8a4a",23),
-    makeLayer(0.55,GROUND-8,30,46,70,["oak","birch","pine","oak"],sky,0.14,"#2f7a3a",37)];
+    makeLayer(0.12,GROUND-40,16,34,48,["pine","pine","oak"],sky,0.62,"#5a9a6a",11),
+    makeLayer(0.3,GROUND-24,30,52,74,["oak","pine","birch","oak"],sky,0.38,"#3f8a4a",23),
+    makeLayer(0.55,GROUND-8,62,84,120,["oak","birch","pine","oak"],sky,0.14,"#2f7a3a",37)];
 }
 function drawLayers(){
   if(S.room||S.map!=="meadow"||!MLAY) return;
@@ -3030,7 +3075,7 @@ function buildWorldTrees(){
   var sky=hexRGB("#9ad8f0"), xs=S.map==="meadow"?[0.05,0.95]:[0.08,0.93];
   /* in the meadow the grab points are branches of two tall trees */
   if(S.map==="meadow") ANCH.forEach(function(a,i){ WTREES.push({x:a.x-12,img:makeTree("oak",a.z+36,i*53+19,sky,0),tall:1}); });
-  xs.forEach(function(f,i){ var k=kinds[i%kinds.length], h=k==="dead"?52:(S.map==="meadow"?78:60);
+  xs.forEach(function(f,i){ var k=kinds[i%kinds.length], h=k==="dead"?52:(S.map==="meadow"?128:60);
     WTREES.push({x:Math.round(WORLDW*f),img:makeTree(k,h,i*31+7,sky,0)}); });
 }
 function drawWorldTrees(){
@@ -3516,7 +3561,7 @@ function updHero(){
   h.t++;
   if(h.st==="ko")return;
   var TG=TGT();
-  if(h.st!=="attack"&&h.st!=="special"&&TG) h.dir=(TG.x>=h.x)?1:-1;
+  if(h.st!=="attack"&&h.st!=="special"&&h.st!=="climb"&&h.st!=="mantle"&&h.st!=="swing"&&TG) h.dir=(TG.x>=h.x)?1:-1;
   if(h.st==="hurt"&&h.t>18){h.st="idle";h.t=0;}
   var dashing=updDash(h);
   var free=(h.st==="idle"||h.st==="walk"||h.st==="block");
@@ -4896,7 +4941,7 @@ function startFight(){
   S.pj=0;
   setScene("fight"); syncHUD(); callout("FIGHT!",900); S.startTime=Date.now();
   setTimeout(function(){ if(S.scene==="fight"&&!S.room&&S.hero)
-    callout("HIDDEN ROOM: FIND THE "+SECRETNAME[S.map]+(doorX()>S.hero.x?" →":" ←"),1800); },1500); }
+    if(S.map!=="meadow") callout("HIDDEN ROOM: FIND THE "+SECRETNAME[S.map]+(doorX()>S.hero.x?" →":" ←"),1800); },1500); }
 function endGame(won){
   if(S.scene==="end") return;
   if(S.mode==="story"){ storyEnd(won); return; }
