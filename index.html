@@ -796,8 +796,18 @@ function heroPose(f){
       P.aa=[-1.1,0.5]; P.ab=[-1.6,0.4];
       P.la=[1.45,0.05]; P.lb=[-0.5,1.1]; P.lean=2;
     }
-  } else if(st==="climb"){ var cl=Math.sin(S.frames*0.25);
-    P.aa=[2.7+cl*0.3,0.3]; P.ab=[2.7-cl*0.3,0.3]; P.la=[0.6+cl*0.4,0.8]; P.lb=[0.6-cl*0.4,0.8]; P.lean=0;
+  } else if(st==="climb"){
+    /* hand over hand: one arm stretched up gripping, the other pulled in under the
+       shoulder, the opposite knee driving up; swaps every grab */
+    var cd=(f.clD!=null)?f.clD:S.frames*0.6, ph=Math.floor(cd/9)%2, k=(cd%9)/9, pull=Math.sin(k*Math.PI);
+    var up=[2.95,0.05], tuck=[1.9-pull*0.4,1.25], kneeUp=[1.15+pull*0.25,-1.5], legDown=[0.15,-0.25];
+    P.aa=ph?up:tuck; P.ab=ph?tuck:up; P.la=ph?legDown:kneeUp; P.lb=ph?kneeUp:legDown;
+    P.lean=1; P.crouch=0; P.bob=Math.round(-pull);
+  } else if(st==="mantle"){
+    var mt=(f.mT||0), mn=(f.id==="goliath")?16:13, q=mt/mn;
+    if(q<0.35){ P.aa=[2.75,0.15]; P.ab=[2.6,0.2]; P.la=[0.3,-0.4]; P.lb=[0.1,-0.3]; P.lean=1; P.crouch=0; }
+    else if(q<0.75){ P.aa=[1.1,-0.9]; P.ab=[1.0,-0.8]; P.la=[1.45,-1.6]; P.lb=[0.2,-0.3]; P.lean=3; P.crouch=2; }
+    else { P.aa=[0.55,0.3]; P.ab=[0.35,0.3]; P.la=[0.8,-0.9]; P.lb=[-0.2,0.2]; P.lean=2; P.crouch=1; }
   } else if(st==="swing"){ P.aa=[2.9,0.1]; P.ab=[2.4,0.4]; P.la=[0.5,0.5]; P.lb=[-0.4,0.7];
     P.lean=Math.max(-4,Math.min(4,Math.round((f.vx||0)*f.dir*0.8)));
   } else if(st==="dive"){ P.aa=[0.75,0.05]; P.ab=[-0.6,0.4]; P.lean=6; P.la=[-1.1,0.4]; P.lb=[-1.45,0.5];
@@ -2378,12 +2388,28 @@ function updClimb(h){
   var s=h.clS;
   if(!s||s.hp<=0){ h.st="idle"; h.clS=null; return; }
   var sp=(h.id==="goliath")?1.5:2;
-  if(IN.hold) h.z+=sp; else h.z=Math.max(0,h.z-0.6);
+  if(IN.hold){ h.z+=sp; var g0=Math.floor((h.clD||0)/9); h.clD=(h.clD||0)+sp;
+    if(Math.floor(h.clD/9)!==g0){ var hsc=h.sc||h.c.sc; spark(h.x+h.dir*5*hsc,GROUND-h.z-56*hsc,3,"#a89a80",1.6,0.6); beep(240+((h.clD/9|0)%2)*60,.03,"square",.025); } }
+  else h.z=Math.max(0,h.z-0.6);
   h.x=Math.max(s.x0-4,Math.min(s.x1+4,h.x));
-  if(h.z>=s.h){ h.z=s.h; h.st="idle"; h.t=0; h.clS=null; h.onPlat=s.roof; h.jumps=0; callout("ON TOP",500); }
+  if(h.z>=s.h-14){ startMantle(h,s.roof); h.clS=null; }
   else if(h.clRel){ h.st="idle"; h.clS=null; h.vz=5.5; h.vx=(h.x<(s.x0+s.x1)/2?-1:1)*3; SFX.jump(); }
   else if(h.z<=0){ h.st="idle"; h.clS=null; }
   h.clRel=0; h.fy=GROUND-h.z;
+}
+/* pulling yourself up over an edge: hands plant, push up, knee over, stand */
+function startMantle(h,pl){
+  h.st="mantle"; h.t=0; h.mT=0; h.mPl=pl; h.mZ0=Math.min(h.z,pl.z-2); h.vz=0; h.onPlat=null;
+  var mid=(pl.x0+pl.x1)/2; h.mX0=h.x; h.mX1=h.x+Math.max(-10,Math.min(10,mid-h.x));
+  spark(h.x,GROUND-pl.z,4,"#cfc3b0",1.5,0.8);
+}
+function updMantle(h){
+  var pl=h.mPl, n=(h.id==="goliath")?16:13;
+  if(!pl||(pl.st&&pl.st.hp<=0)){ h.st="idle"; h.mPl=null; return; }
+  h.mT++; var t=Math.min(1,h.mT/n), e=t<0.35?0:Math.min(1,(t-0.35)/0.65);
+  e=1-Math.pow(1-e,2);
+  h.z=h.mZ0+(pl.z-h.mZ0)*e; h.x=h.mX0+(h.mX1-h.mX0)*e; h.fy=GROUND-h.z;
+  if(h.mT>=n){ h.z=pl.z; h.onPlat=pl; h.st="idle"; h.t=0; h.jumps=0; h.airDash=0; h.flewAir=0; h.mPl=null; h.clD=0; }
 }
 /* one context button for touch screens: SWING or CLIMB when either is possible */
 var ctxOn="";
@@ -2532,33 +2558,6 @@ function paintHouse(w,H,seed){
     if(wy%3<0.45||bx%1<0.07) return rampC(R.mortar,0.5*light,x,y);
     var streak=smoothN(wx*0.8,wy*0.05,seed+3)>0.72?-0.12:0;
     return rampC(R.brick,(0.35+hsh(Math.floor(bx),row2,seed)*0.4)*light*eave+streak,x,y);
-  });
-  b.outline(OUTLINE);
-  return {buf:b,ox:pad*u,oy:top*u,pad:pad,top:top};
-}
-function paintTree(w,H,seed){
-  var u=HD, pad=20, top=4, cw=w+pad*2, b=new PixBuf(cw*u,(H+top)*u), R=RAMPS;
-  var cx=cw/2, blobs=[];
-  for(var i=0;i<46;i++){ var a=hsh(i,1,seed)*Math.PI*2, rr=Math.sqrt(hsh(i,2,seed));
-    blobs.push({x:cx+Math.cos(a)*rr*(cw/2-9), y:top+15+Math.sin(a)*rr*13, r:6+hsh(i,3,seed)*6}); }
-  blobs.sort(function(p,q){ return p.y-q.y; });
-  b.fill(function(X,Y,x,y){
-    /* canopy: overlapping leaf clusters, each lit from the upper left */
-    for(var i=blobs.length-1;i>=0;i--){ var c=blobs[i], dx=X-c.x, dy=Y-c.y, d2=dx*dx+dy*dy;
-      if(d2<c.r*c.r){ var nx=dx/c.r, ny=dy/c.r, nz=Math.sqrt(Math.max(0,1-nx*nx-ny*ny));
-        var lit=0.15+0.85*Math.max(0,-nx*0.5-ny*0.62+nz*0.6), ao=Math.min(1,Math.abs(Y-(top+15))/16)*0.15;
-        if(hsh(x,y,seed)>0.93) lit+=0.25;
-        if(hsh(x>>1,y>>1,seed+5)>0.996) return hexRGB("#d83a2a");
-        return rampC(R.leaf,lit-ao,x,y); } }
-    /* trunk with flared roots and bark grooves */
-    var by=Y-top, half=7+Math.max(0,(by-(H-12)))*0.7;
-    if(by>20&&Math.abs(X-cx)<half&&by<H){
-      var lx=(X-cx)/half, lit2=0.55-lx*0.35;
-      var groove=Math.sin((X-cx)*1.6+smoothN(X*0.3,by*0.12,seed)*4)>0.55;
-      if(Math.abs(X-cx-2)<1.6&&Math.abs(by-48)<2.2) return R.bark[0];
-      return rampC(R.bark,lit2-(groove?0.3:0)+smoothN(X,by*0.2,seed+1)*0.15,x,y); }
-    if(by>H-3&&by<H&&Math.abs(X-cx)<w*0.7&&hsh(x>>1,0,seed)>0.4) return rampC(R.moss,0.6,x,y);
-    return null;
   });
   b.outline(OUTLINE);
   return {buf:b,ox:pad*u,oy:top*u,pad:pad,top:top};
@@ -2869,42 +2868,102 @@ var TREEPAL={
   dead:{leaf:null,trunk:["#120c10","#2a1c1c","#463028","#5e4434"]}};
 function shiftPal(p,sky,t){ return p?p.map(function(c){ return mixC(hexRGB(c),sky,t); }):null; }
 /* one tree, as a small image; mix>0 fades it toward the sky for distant layers */
+/* ---- clumped pixel canopies ----
+   A canopy is many small leaf clumps, a few pixels across. Each clump has
+   its own lit rim on the upper left and a dark lip underneath, and the
+   whole tree is lit from the upper left, so the leaves read as texture
+   rather than one rounded mass. */
+function makeClumps(cx,cy,rx,ry,seed,size){
+  var C=[], n=Math.max(10,Math.round(rx*ry/(size*size*0.75)));
+  for(var i=0;i<n;i++){ var a=hsh(i,11,seed)*Math.PI*2, r=Math.sqrt(hsh(i,12,seed))*0.85;
+    C.push({x:cx+Math.cos(a)*r*rx, y:cy+Math.sin(a)*r*ry, r:size*(0.8+hsh(i,13,seed)*0.45)}); }
+  /* a ring of clumps on the outside, so the silhouette is scalloped all round */
+  var m=Math.round((rx+ry)*0.8/size)+8;
+  for(var k=0;k<m;k++){ var b=k/m*Math.PI*2; C.push({x:cx+Math.cos(b)*rx*0.84, y:cy+Math.sin(b)*ry*0.84, r:size*(0.85+hsh(k,14,seed)*0.3)}); }
+  C.sort(function(p,q){ return p.y-q.y; });
+  return C;
+}
+/* colour of one canopy pixel, or null; L is a dark-to-light leaf palette */
+function clumpPixel(X,Y,C,L,cx,cy,rx,ry,seed){
+  for(var i=C.length-1;i>=0;i--){ var c=C[i], dx=X-c.x, dy=Y-c.y, d2=dx*dx+dy*dy;
+    if(d2>=c.r*c.r) continue;
+    /* how lit this clump is overall: brighter up and to the left */
+    var g=0.5-(c.y-cy)/ry*0.34-(c.x-cx)/rx*0.2;
+    var base=Math.round(Math.max(1,Math.min(L.length-2,1+g*(L.length-2))));
+    var d=Math.sqrt(d2);
+    if(dy>c.r*0.25&&d>c.r-1.3) return L[Math.max(0,base-2)];
+    if(dx+dy<-c.r*0.55&&d>c.r*0.35) return L[Math.min(L.length-1,base+1+(base>=L.length-3&&hsh(X,Y,seed)>0.6?1:0))];
+    if(dx>c.r*0.45&&dy>-c.r*0.2) return L[Math.max(0,base-1)];
+    return L[base];
+  }
+  /* between clumps: deep shade inside the canopy, so it reads as depth, not holes */
+  var ex=(X-cx)/rx, ey=(Y-cy)/ry;
+  if(ex*ex+ey*ey<0.8) return L[ey>0.2?0:1];
+  return null;
+}
 function makeTree(kind,h,seed,sky,mix){
   var P=TREEPAL[kind], L=shiftPal(P.leaf,sky,mix), T=shiftPal(P.trunk,sky,mix);
-  var w=(kind==="pine")?Math.round(h*0.55):Math.round(h*0.8), b=new PixBuf(w+4,h+2), cx=(w+4)/2;
-  var lit=function(n){ return Math.max(0,Math.min(0.999,n)); };
+  var w=(kind==="pine")?Math.round(h*0.62):Math.round(h*0.85), b=new PixBuf(w+4,h+2), cx=(w+4)/2;
+  var size=Math.max(2.6,h/11);
   if(kind==="pine"){
+    var tiers=Math.max(3,Math.round(h/12)), top=1, bot=h*0.86;
     b.fill(function(X,Y,x,y){
-      if(Y>h*0.82&&Math.abs(X-cx)<1.6) return T[Math.abs(X-cx)<0.6?2:1];
-      var tiers=4, tierH=h*0.82/tiers, ti=Math.min(tiers-1,Math.floor(Y/tierH)), ty=(Y-ti*tierH)/tierH;
-      var half=(w/2)*(0.35+0.65*(ti+ty)/tiers)*ty+1, jag=(hsh(Math.round(Y),ti,seed)>0.6)?1:0;
-      if(Math.abs(X-cx)>half+jag||Y<1) return null;
-      var side=(X-cx)/Math.max(1,half);
-      var t=0.55-side*0.35-ty*0.2+(ty<0.25?0.15:0);
-      return L[Math.round(lit(t)*(L.length-1))];
+      for(var t=tiers-1;t>=0;t--){
+        var ty0=top+(bot-top)*t/tiers*0.86, ty1=top+(bot-top)*(t+1)/tiers+2;
+        var half=(w/2-1)*(0.32+0.68*(t+1)/tiers);
+        if(Y<ty0||Y>ty1+2) continue;
+        var k=(Y-ty0)/(ty1-ty0), hw=half*Math.min(1,k*1.05)+0.5;
+        /* drooping, scalloped lower edge made of little clumps */
+        var cw=Math.max(3,size*1.3), u=((X-cx+half)%cw+cw)%cw, droop=Math.sqrt(Math.max(0,(cw/2)*(cw/2)-(u-cw/2)*(u-cw/2)))*0.6;
+        if(Math.abs(X-cx)>hw||Y>ty1+droop-1) continue;
+        var side=(X-cx)/Math.max(1,hw);
+        if(Y>ty1+droop-2.2) return L[0];
+        if(side<-0.15){ var hi=(u<cw*0.45&&(Y-ty0)%3<1.2); return L[hi?L.length-1:L.length-2]; }
+        if(side<0.35) return L[L.length-3];
+        return L[Math.max(1,L.length-4)];
+      }
+      if(Y>bot-2&&Math.abs(X-cx)<1.6) return T[Math.abs(X-cx)<0.6?T.length-1:1];
+      return null;
     });
   } else if(kind==="dead"){
     var br=[]; for(var i=0;i<5;i++) br.push({y:h*(0.2+hsh(i,1,seed)*0.45),d:hsh(i,2,seed)>0.5?1:-1,l:h*(0.15+hsh(i,3,seed)*0.2)});
-    b.fill(function(X,Y,x,y){
-      var tw=1.2+(Y/h)*1.6; if(Math.abs(X-cx)<tw&&Y>h*0.15) return T[X<cx?2:1];
+    b.fill(function(X,Y){ var tw=1.2+(Y/h)*1.6; if(Math.abs(X-cx)<tw&&Y>h*0.15) return T[X<cx?2:1];
       for(var i=0;i<br.length;i++){ var B=br[i], dx=(X-cx)*B.d; if(dx>0&&dx<B.l&&Math.abs(Y-(B.y-dx*0.6))<0.8) return T[2]; }
       return null; });
   } else {
-    /* oak or birch: a canopy of clustered lobes over a trunk */
-    var lobes=[]; for(var j=0;j<9;j++){ var a=hsh(j,4,seed)*Math.PI*2, r=Math.sqrt(hsh(j,5,seed));
-      lobes.push({x:cx+Math.cos(a)*r*w*0.26, y:h*0.36+Math.sin(a)*r*h*0.16, r:w*(0.17+hsh(j,6,seed)*0.1)}); }
-    lobes.sort(function(p,q){ return p.y-q.y; });
+    var rx=w/2-1, ry=h*0.36, ccy=ry+1, C=makeClumps(cx,ccy,rx,ry,seed,size);
     b.fill(function(X,Y,x,y){
-      for(var i=lobes.length-1;i>=0;i--){ var o=lobes[i], dx=X-o.x, dy=Y-o.y, d=Math.sqrt(dx*dx+dy*dy);
-        if(d<o.r){ var t=0.55-dx/o.r*0.3-dy/o.r*0.35+(d<o.r*0.45&&dx<0&&dy<0?0.15:0)-(Y>h*0.48?0.2:0);
-          return L[Math.round(lit(t)*(L.length-1))]; } }
-      var tw=kind==="birch"?1.3:1.8+(Y>h*0.9?(Y-h*0.9)*0.8:0);
-      if(Math.abs(X-cx)<tw&&Y>h*0.4){ if(kind==="birch"&&hsh(Math.round(Y),1,seed)>0.78) return T[0];
-        return T[X<cx?T.length-1:Math.max(1,T.length-2)]; }
+      var c=clumpPixel(X,Y,C,L,cx,ccy,rx,ry,seed); if(c) return c;
+      /* trunk: bark grain on oaks, black dashes on birch, a little root flare */
+      var tw=(kind==="birch"?1.6:2.2)+(Y>h-3?(Y-(h-3))*0.9:0);
+      if(Math.abs(X-cx)<tw&&Y>ccy){
+        var lx=X-cx;
+        if(kind==="birch"){ if(hsh(Math.round(Y),3,seed)>0.72&&lx<0.8) return T[0]; return lx>0.6?T[1]:(lx<-0.8?T[3]:T[2]); }
+        if(Math.round(lx+Y*0.15)%3===0) return T[1];
+        return lx<-0.6?T[3]:(lx>0.8?T[1]:T[2]); }
       return null; });
   }
-  var oc=mixC(hexRGB("#0a0814"),sky,mix*0.8); b.outline(oc);
+  var oc=mixC(hexRGB(kind==="birch"||kind==="oak"||kind==="pine"?"#0a1414":"#0a0814"),sky,mix*0.8); b.outline(oc);
   return b.canvas();
+}
+
+/* the big climbable meadow tree, in the same clumped style */
+function paintTree(w,H,seed){
+  var pad=20, top=4, cw=w+pad*2, b=new PixBuf(cw,H+top), R=RAMPS, L=R.leaf, Bk=R.bark;
+  var cx=cw/2, rx=cw/2-8, ry=21, ccy=top+20, C=makeClumps(cx,ccy,rx,ry,seed,4.6);
+  b.fill(function(X,Y,x,y){
+    var c=clumpPixel(X,Y,C,L,cx,ccy,rx,ry,seed); if(c){ if(hsh(x>>1,y>>1,seed+5)>0.997) return hexRGB("#d83a2a"); return c; }
+    var by=Y-top, half=6+Math.max(0,(by-(H-10)))*0.9;
+    if(by>18&&Math.abs(X-cx)<half&&by<H){
+      var lx=X-cx;
+      if(Math.abs(lx-2)<1.5&&Math.abs(by-46)<2) return Bk[0];
+      if(Math.round(lx*0.8+by*0.12)%3===0) return Bk[1];
+      return lx<-half*0.45?Bk[4]:(lx>half*0.4?Bk[1]:(lx<0?Bk[3]:Bk[2])); }
+    if(by>H-3&&by<H&&Math.abs(X-cx)<w*0.7&&hsh(x>>1,0,seed)>0.45) return L[3];
+    return null;
+  });
+  b.outline(hexRGB("#0a1414"));
+  return {buf:b,ox:pad,oy:top,pad:pad,top:top};
 }
 /* a layer: rolling ground with a band of trees on it, wide enough for its scroll speed */
 function makeLayer(f,base,density,hmin,hmax,kinds,sky,mix,groundCol,seed){
@@ -3477,7 +3536,7 @@ function updHero(){
   if(c.fly){
     if(h.stam===undefined) h.stam=c.stam;
     var ceil=Math.min(150,GROUND-64);
-    var thrusting = IN.hold && h.stam>0 && h.z>1 && !h.onPlat && h.z<ceil && h.st!=="hurt" && h.st!=="ko" && h.st!=="dive" && h.st!=="slamland" && h.st!=="climb";
+    var thrusting = IN.hold && h.stam>0 && h.z>1 && !h.onPlat && h.z<ceil && h.st!=="hurt" && h.st!=="ko" && h.st!=="dive" && h.st!=="slamland" && h.st!=="climb" && h.st!=="mantle";
     if(thrusting){
       h.vz=Math.min(h.vz+0.6,3.4); h.stam-=(c.flyDrain||1.15); h.flying=true; h.flewAir=1;
       if(h.id==="ironclad"&&h.z>40&&!S.taught.dive){ S.taught.dive=1; callout("PRESS ATTACK IN THE AIR TO DIVE SLAM",1800); }
@@ -3518,7 +3577,7 @@ function updHero(){
   }
   if(h.st==="slamland"&&h.t>18){ h.st="idle"; h.t=0; }
 
-  if(h.st==="swing") updSwing(h); else if(h.st==="climb") updClimb(h); else {
+  if(h.st==="swing") updSwing(h); else if(h.st==="climb") updClimb(h); else if(h.st==="mantle") updMantle(h); else {
   /* rise at the old rate, fall faster, and let go of jump early for a short hop */
   var z0=h.z, gv=(h.vz<0)?0.46:0.33;
   if(h.vz>0&&!IN.hold&&!c.fly&&h.st!=="special"&&h.st!=="dive") gv=0.62;
@@ -3528,6 +3587,7 @@ function updHero(){
     if(h.vz<1.5&&!(h.dropT>0)){ var SF=surfaces(); for(var pi=0;pi<SF.length;pi++){ var pl=SF[pi];
       var over=(h.vz<0&&h.x>=pl.x0&&h.x<=pl.x1&&z0>=pl.z&&h.z<=pl.z);
       var grab=(h.st!=="dive"&&h.x>=pl.x0-6&&h.x<=pl.x1+6&&h.z<pl.z&&pl.z-h.z<16);
+      if(grab&&!over&&(h.st==="idle"||h.st==="walk")){ startMantle(h,pl); break; }
       if(over||grab){ if(grab&&!over){ spark(h.x,GROUND-pl.z,3,"#cfc3b0",1.5,1); } h.z=pl.z; h.vz=0; h.onPlat=pl; h.jumps=0; h.airDash=0; h.flewAir=0;
         if(h.st==="dive") diveImpact(h); break; } } } }
   if(h.dropT>0) h.dropT--;
