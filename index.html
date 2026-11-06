@@ -1907,7 +1907,7 @@ function drawBG(){
     }
     G.globalAlpha=.30; px(0,0,WW,30,"#000"); px(0,WH-30,WW,30,"#000"); G.globalAlpha=1;
   }
-  drawAtmos(); drawStructs(); drawDoor(); drawAnchors(); drawPlats(); drawStandLines(); drawAmbient();
+  drawAtmos(); drawStructs(); drawDoor(); drawAnchors(); drawPlats(); drawDebris(); drawStandLines(); drawAmbient();
 }
 
 /* ================= story mode ================= */
@@ -2460,29 +2460,7 @@ function drawAtmos(){
 var STRUCTS=[], CLIMBERS={weaver:1,goliath:1,ironclad:1};
 function liveStructs(){ return STRUCTS.filter(function(s){ return s.hp>0; }); }
 /* every surface you can land on: floating platforms and standing rooftops */
-function hurtStruct(s,amt){
-  if(s.hp<=0) return;
-  s.hp-=amt;
-  s.h=Math.max(16,Math.round(s.maxh*(0.35+0.65*Math.max(0,s.hp)/s.maxhp)));
-  s.roof.z=s.h;
-  if(amt>=10){ spark((s.x0+s.x1)/2,GROUND-s.h,8,"#a89a80",4,2); }
-  if(s.hp<=0){
-    s.hp=0; s.h=0; s.roof.z=0;
-    var cx=(s.x0+s.x1)/2; shake(10); SFX.big();
-    for(var r=0;r<26;r++) S.fx.push({x:cx+(Math.random()-.5)*(s.x1-s.x0),y:GROUND-20-Math.random()*s.maxh*0.6,
-      vx:(Math.random()-.5)*5,vy:-1-Math.random()*4,g:.3,life:40+Math.random()*30,c:r%2?"#6a5a48":"#a89a80",s:4});
-    callout("IT'S COMING DOWN!",900);
-    var h=S.hero; if(h&&(h.onPlat===s.roof||h.clS===s)){ h.onPlat=null; h.clS=null; if(h.st==="climb") h.st="idle"; h.vz=1; }
-  }
-}
 /* the boss erodes whatever he's standing next to, and his big hits land on structures too */
-function updStructs(){
-  var b=S.boss; if(!b||b.hp<=0||S.mode==="pvp") return;
-  liveStructs().forEach(function(s){
-    if(Math.abs(b.x-(s.x0+s.x1)/2)<90){ hurtStruct(s,0.06); if(S.frames%40===0) spark(s.x0+Math.random()*(s.x1-s.x0),GROUND-s.h,3,"#a89a80",2,1); }
-  });
-}
-function quakeStructs(x,amt){ liveStructs().forEach(function(s){ if(Math.abs(x-(s.x0+s.x1)/2)<110) hurtStruct(s,amt); }); }
 function structAt(h){
   var L=liveStructs();
   for(var i=0;i<L.length;i++){ var s=L[i]; if(h.x>=s.x0-6&&h.x<=s.x1+6&&h.z<s.h-8) return s; }
@@ -2526,18 +2504,6 @@ function buildPlats(){
   var W=WORLDW, c=Math.round(W*LAYOUT.centre), z=Math.round(stageH()*0.74);
   PLATS=[{x0:c-50,x1:c+50,z:z}];
 }
-function buildStructs(){
-  var W=WORLDW, key=S.room?"room":S.map, H=stageH();
-  STRUCTS=LAYOUT.structX.map(function(f,i){
-    var w=(key==="meadow")?50:62, cx=Math.round(W*f);
-    var s={x0:cx-w/2,x1:cx+w/2,maxh:H,h:H,hp:220,maxhp:220,key:key,i:i,inner:i?-1:1};
-    s.roof={x0:s.x0+2,x1:s.x1-2,z:H,st:s};
-    /* the step ledge sticks out on the side facing the middle */
-    var lz=Math.round(H*0.5);
-    s.ledge=(s.inner>0)?{x0:s.x1-6,x1:s.x1+38,z:lz,st:s}:{x0:s.x0-38,x1:s.x0+6,z:lz,st:s};
-    return s;
-  });
-}
 function buildAnchors(){
   var W=WORLDW, z=Math.round(stageH()*1.3);
   ANCH=[0.36,0.64].map(function(f,i){ return {x:Math.round(W*f),z:z,i:i}; });
@@ -2562,69 +2528,426 @@ function drawStandLines(){
   for(var i=0;i<L.length;i++){ var p=L[i], y=GROUND-p.z;
     G.globalAlpha=pulse; px(p.x0,y-1,p.x1-p.x0,2,"#fff6d0"); G.globalAlpha=1; }
 }
-function drawLedge(s,P){
-  var L=s.ledge, y=GROUND-L.z, w=L.x1-L.x0, k=s.key;
-  if(k==="meadow"){ /* a thick branch with leaves */
-    px(L.x0-1,y-1,w+2,7,P[0]); px(L.x0,y,w,5,P[2]); px(L.x0,y,w,2,P[3]);
-    disc(L.x0+(s.inner>0?w-6:6),y-6,9,"#2f6a24"); disc(L.x0+(s.inner>0?w-14:14),y-9,7,"#3f7a2e");
-  } else if(k==="town"||k==="palace"){ /* a balcony with a rail */
-    px(L.x0-1,y-1,w+2,7,P[0]); px(L.x0,y,w,5,P[1]); px(L.x0,y,w,2,P[3]);
-    px(L.x0,y-10,w,2,P[k==="palace"?4:3]); for(var r=2;r<w;r+=6) px(L.x0+r,y-9,2,9,P[0]);
-    px(L.x0+(s.inner>0?w-4:2),y+5,2,8,P[0]);
-  } else { /* a stone or rock shelf with a brace underneath */
-    px(L.x0-1,y-1,w+2,8,P[0]); px(L.x0,y,w,6,P[2]); px(L.x0,y,w,2,P[3]);
-    for(var b=0;b<8;b++) px(L.x0+(s.inner>0?w-10+b:2+(8-b)),y+6+b,10-b,1,P[1]);
-  }
+/* ================= fine-pixel structure sprites ================= */
+/* The canvas is drawn HD times finer than the game grid. Structures are
+   painted once per fight, pixel by pixel at that density, into their own
+   images; every frame then just places (and crops, tilts or shatters) them. */
+var HD=2;
+function hexRGB(h){ return [parseInt(h.substr(1,2),16),parseInt(h.substr(3,2),16),parseInt(h.substr(5,2),16)]; }
+function mulC(c,f){ return [c[0]*f,c[1]*f,c[2]*f]; }
+function mixC(a,b,t){ return [a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t]; }
+function hsh(x,y,s){ var n=(x*374761393+y*668265263+(s||0)*1442695041)|0; n=Math.imul(n^(n>>>13),1274126177); return ((n^(n>>>16))>>>0)/4294967295; }
+var BAY4=[0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5];
+/* pick from a dark-to-light ramp with ordered dithering between steps */
+function rampC(R,t,x,y){ var v=Math.max(0,Math.min(0.999,t))*(R.length-1)+(BAY4[(y&3)*4+(x&3)]/16-0.47);
+  return R[Math.max(0,Math.min(R.length-1,Math.round(v)))]; }
+function smoothN(x,y,s){ /* cheap value noise */
+  var xi=Math.floor(x), yi=Math.floor(y), fx=x-xi, fy=y-yi;
+  var a=hsh(xi,yi,s), b=hsh(xi+1,yi,s), c=hsh(xi,yi+1,s), d=hsh(xi+1,yi+1,s);
+  fx=fx*fx*(3-2*fx); fy=fy*fy*(3-2*fy);
+  return a+(b-a)*fx+(c-a)*fy+(a-b-c+d)*fx*fy; }
+function PixBuf(w,h){ this.w=w; this.h=h; this.d=new Uint8ClampedArray(w*h*4); }
+PixBuf.prototype.set=function(x,y,c){ x|=0; y|=0; if(x<0||y<0||x>=this.w||y>=this.h||!c) return;
+  var i=(y*this.w+x)*4; this.d[i]=c[0]; this.d[i+1]=c[1]; this.d[i+2]=c[2]; this.d[i+3]=255; };
+PixBuf.prototype.on=function(x,y){ return x>=0&&y>=0&&x<this.w&&y<this.h&&this.d[(y*this.w+x)*4+3]>0; };
+/* paint every pixel through f(x,y) in game units; f returns a colour or null */
+PixBuf.prototype.fill=function(f){ var u=HD;
+  for(var y=0;y<this.h;y++) for(var x=0;x<this.w;x++){ var c=f(x/u,y/u,x,y); if(c) this.set(x,y,c); } };
+/* a 1-fine-pixel dark rim wherever the shape meets empty space */
+PixBuf.prototype.outline=function(c){ var w=this.w,h=this.h,src=new Uint8ClampedArray(this.d), on=function(x,y){ return x>=0&&y>=0&&x<w&&y<h&&src[(y*w+x)*4+3]>0; };
+  for(var y=0;y<h;y++) for(var x=0;x<w;x++) if(on(x,y)&&(!on(x-1,y)||!on(x+1,y)||!on(x,y-1)||!on(x,y+1))) this.set(x,y,c); };
+PixBuf.prototype.canvas=function(){ var cv=document.createElement('canvas'); cv.width=this.w; cv.height=this.h;
+  var g=cv.getContext('2d'), id=g.createImageData(this.w,this.h); id.data.set(this.d); g.putImageData(id,0,0); return cv; };
+
+var RAMPS={
+  brick:["#3a140c","#5a2216","#7a3020","#93402a","#a8553a"].map(hexRGB),
+  mortar:["#6a5a4a","#8a7a68","#a89a86"].map(hexRGB),
+  tile:["#2a0e0a","#4a1a12","#6e2a1c","#8e3a26","#a85032"].map(hexRGB),
+  stone:["#12101a","#211c2c","#30283e","#423852","#564a68","#6c5e80"].map(hexRGB),
+  moss:["#142410","#1f3a18","#2f5a24","#4a7a34"].map(hexRGB),
+  bark:["#1a0e06","#2e1c0e","#46301a","#5e4426","#7a5a34"].map(hexRGB),
+  leaf:["#0c1e0a","#16330f","#22501a","#2f6a24","#3f8a2e","#5aa83e","#86c860"].map(hexRGB),
+  rock:["#1e140e","#3a2a20","#54402e","#6e543c","#8a6c4c","#a8885e"].map(hexRGB),
+  marble:["#6a6458","#9a9284","#c0b8a8","#ddd6c8","#f0ebe0","#ffffff"].map(hexRGB),
+  gold:["#4a3410","#7a5a1a","#a5822c","#d0a838","#e0c256","#fff0b0"].map(hexRGB),
+  wood:["#1e1208","#3a2410","#5a3a1a","#7a5228","#946a38"].map(hexRGB),
+  iron:["#0c0c10","#24242c","#3c3c48","#5a5a68"].map(hexRGB),
+  glass:["#c86020","#e08a30","#f0b048","#ffd878","#fff2c0"].map(hexRGB),
+  cloth:["#3a0a14","#5a1020","#7a1428","#9a2034"].map(hexRGB)};
+var OUTLINE=hexRGB("#0a0608");
+
+/* ---- the painters: each returns {buf, ox, oy} in fine pixels;
+   (ox,oy) is where the structure's left wall and roof line sit in the image ---- */
+function paintHouse(w,H,seed){
+  var u=HD, pad=6, top=18, b=new PixBuf((w+pad*2)*u,(H+top)*u), R=RAMPS;
+  var winCols=[w*0.27,w*0.73], door=w/2;
+  b.fill(function(X,Y,x,y){
+    var wx=X-pad, wy=Y-top;
+    /* chimney and roof */
+    if(wy<0){
+      if(wx>w*0.66&&wx<w*0.66+8&&wy>-18&&wy<-6){ if(wy<-16) return rampC(R.stone,0.6,x,y);
+        var br=((wy*2|0)%2)?((wx+2)%4<0.5):(wx%4<0.5); return br||((wy*2)%1<0.25)?R.mortar[0]:rampC(R.brick,0.45+hsh(wx/4|0,wy/2|0,seed)*0.4,x,y); }
+      var slope=(wy+12)/12, half=(w/2+1)+slope*6; if(wy<-12||Math.abs(wx-w/2)>half) return null;
+      var row=Math.floor((wy+12)/3), off=(row%2)*2.5, tx=(wx+off)/5;
+      var edge=((wy+12)%3)<0.5, seam=(tx%1)<0.12;
+      var t=0.25+0.55*(1-(wx+half-w/2)/(2*half))+hsh(Math.floor(tx),row,seed)*0.25-(edge?0.3:0)-(seam?0.2:0);
+      return rampC(R.tile,t,x,y);
+    }
+    if(wx<0||wx>w) return null;
+    var light=1-wx/w*0.35, eave=wy<3?0.6+wy*0.13:1;
+    /* stone foundation */
+    if(wy>H-5){ var bl=Math.floor(wx/7+(Math.floor((wy-H+5)/2.5)%2)*0.5); if((wx+((Math.floor((wy-H+5)/2.5)%2)*3.5))%7<0.4||(wy-H+5)%2.5<0.35) return R.stone[1];
+      return rampC(R.stone,(0.35+hsh(bl,1,seed)*0.3)*light,x,y); }
+    /* door: arched planks, iron straps, brass knob, a lamp beside it */
+    var dx=wx-door;
+    if(Math.abs(dx)<6.5&&wy>H-25){ var ay=H-25+6.5-Math.sqrt(Math.max(0,6.5*6.5-dx*dx));
+      if(wy>=ay){ if(Math.abs(dx)>5.6||wy<ay+0.9) return R.stone[3];
+        if(Math.abs(dx-3)<0.9&&Math.abs(wy-(H-12))<0.9) return R.gold[4];
+        if(Math.abs(wy-(H-20))<0.6||Math.abs(wy-(H-9))<0.6) return R.iron[1];
+        return rampC(R.wood,0.35+((dx+6)%3<0.35?-0.25:0)+smoothN(dx,wy*0.3,seed)*0.25,x,y); } }
+    if(Math.abs(wx-door-10)<1.2&&Math.abs(wy-(H-24))<2.5) return Math.abs(wy-(H-24))<1.5?R.glass[4]:R.iron[0];
+    /* windows: lintel, sill, frame, warm glass, curtains, a flower box on some */
+    for(var r=0;r<5;r++){ var wy0=12+r*24; if(wy0+16>H-28) break;
+      for(var cI=0;cI<2;cI++){ var cx=winCols[cI], lx=wx-cx, ly=wy-wy0;
+        if(Math.abs(lx)<7&&ly>-3&&ly<-1) return rampC(R.stone,0.7,x,y);
+        if(Math.abs(lx)<6.5&&ly>13&&ly<15) return rampC(R.stone,0.8-(ly>14.3?0.4:0),x,y);
+        if(Math.abs(lx)<6&&ly>15&&ly<18&&hsh(r,cI,seed)>0.5){ if(ly<16.2&&hsh(wx*3|0,r,seed)>0.4) return hexRGB(hsh(wx*2|0,cI,seed)>0.5?"#e8407a":"#ffd23f"); return ly<16.5?R.moss[3]:R.wood[2]; }
+        if(Math.abs(lx)<5.5&&ly>=-1&&ly<=13){
+          if(Math.abs(lx)>4.6||ly<0||ly>12.2) return R.wood[1];
+          if(Math.abs(lx)<0.35||Math.abs(ly-6)<0.3) return R.wood[2];
+          if(Math.abs(lx)>2.6) return rampC(R.cloth,0.4+Math.sin(lx*5)*0.2+ly*0.02,x,y);
+          var refl=Math.abs((lx+ly*0.6)%5)<0.6?0.25:0;
+          return rampC(R.glass,1-ly/13*0.7+refl,x,y); } } }
+    /* drainpipe */
+    if(Math.abs(wx-(w-2.5))<0.9){ if(wy%20<1) return R.iron[0]; return rampC(R.iron,0.6-(wx>w-2.5?0.3:0),x,y); }
+    /* bricks with mortar, lit from the left, streaked by weather */
+    var row2=Math.floor(wy/3), bx=(wx+(row2%2)*3)/6;
+    if(wy%3<0.45||bx%1<0.07) return rampC(R.mortar,0.5*light,x,y);
+    var streak=smoothN(wx*0.8,wy*0.05,seed+3)>0.72?-0.12:0;
+    return rampC(R.brick,(0.35+hsh(Math.floor(bx),row2,seed)*0.4)*light*eave+streak,x,y);
+  });
+  b.outline(OUTLINE);
+  return {buf:b,ox:pad*u,oy:top*u,pad:pad,top:top};
+}
+function paintTree(w,H,seed){
+  var u=HD, pad=20, top=4, cw=w+pad*2, b=new PixBuf(cw*u,(H+top)*u), R=RAMPS;
+  var cx=cw/2, blobs=[];
+  for(var i=0;i<46;i++){ var a=hsh(i,1,seed)*Math.PI*2, rr=Math.sqrt(hsh(i,2,seed));
+    blobs.push({x:cx+Math.cos(a)*rr*(cw/2-9), y:top+15+Math.sin(a)*rr*13, r:6+hsh(i,3,seed)*6}); }
+  blobs.sort(function(p,q){ return p.y-q.y; });
+  b.fill(function(X,Y,x,y){
+    /* canopy: overlapping leaf clusters, each lit from the upper left */
+    for(var i=blobs.length-1;i>=0;i--){ var c=blobs[i], dx=X-c.x, dy=Y-c.y, d2=dx*dx+dy*dy;
+      if(d2<c.r*c.r){ var nx=dx/c.r, ny=dy/c.r, nz=Math.sqrt(Math.max(0,1-nx*nx-ny*ny));
+        var lit=0.15+0.85*Math.max(0,-nx*0.5-ny*0.62+nz*0.6), ao=Math.min(1,Math.abs(Y-(top+15))/16)*0.15;
+        if(hsh(x,y,seed)>0.93) lit+=0.25;
+        if(hsh(x>>1,y>>1,seed+5)>0.996) return hexRGB("#d83a2a");
+        return rampC(R.leaf,lit-ao,x,y); } }
+    /* trunk with flared roots and bark grooves */
+    var by=Y-top, half=7+Math.max(0,(by-(H-12)))*0.7;
+    if(by>20&&Math.abs(X-cx)<half&&by<H){
+      var lx=(X-cx)/half, lit2=0.55-lx*0.35;
+      var groove=Math.sin((X-cx)*1.6+smoothN(X*0.3,by*0.12,seed)*4)>0.55;
+      if(Math.abs(X-cx-2)<1.6&&Math.abs(by-48)<2.2) return R.bark[0];
+      return rampC(R.bark,lit2-(groove?0.3:0)+smoothN(X,by*0.2,seed+1)*0.15,x,y); }
+    if(by>H-3&&by<H&&Math.abs(X-cx)<w*0.7&&hsh(x>>1,0,seed)>0.4) return rampC(R.moss,0.6,x,y);
+    return null;
+  });
+  b.outline(OUTLINE);
+  return {buf:b,ox:pad*u,oy:top*u,pad:pad,top:top};
+}
+function paintTower(w,H,seed){
+  var u=HD, pad=4, top=9, b=new PixBuf((w+pad*2)*u,(H+top)*u), R=RAMPS;
+  b.fill(function(X,Y,x,y){
+    var wx=X-pad, wy=Y-top;
+    if(wy<0){ if(wx<-2||wx>w+2) return null; var mer=((wx+2)%10)<6; if(!mer||wy<-8) return null;
+      return rampC(R.stone,0.65-(wx+2)%10*0.04,x,y); }
+    if(wx<-1||wx>w+1) return null;
+    if(wy<3) return rampC(R.stone,0.75-wy*0.08,x,y);
+    var light=1-wx/w*0.4;
+    /* glowing arrow slit */
+    if(Math.abs(wx-w/2)<1.2&&wy>18&&wy<34) return rampC(R.glass,0.5+Math.sin(wy*0.4)*0.2,x,y);
+    if(Math.abs(wx-w/2)<2.4&&wy>16.5&&wy<35.5) return R.stone[0];
+    /* hanging banner with a gold diamond */
+    var bx=wx-w*0.5, by=wy-44;
+    if(Math.abs(bx)<7&&by>0&&by<(26-Math.abs(bx)*0.6)){ if(by<1.2) return R.gold[2];
+      var dm=Math.abs(bx)+Math.abs(by-11)<4.5; if(dm) return rampC(R.gold,0.7-Math.abs(bx)*0.08,x,y);
+      return rampC(R.cloth,0.55+Math.sin(bx*1.3)*0.25,x,y); }
+    /* irregular blocks with bevelled edges and moss creeping up from the base */
+    var row=Math.floor(wy/6), rh=wy-row*6, seedW=7+hsh(row,0,seed)*5, ox2=hsh(row,9,seed)*seedW;
+    var col=Math.floor((wx+ox2)/seedW), cx2=(wx+ox2)-col*seedW;
+    if(rh<0.45||cx2<0.45) return R.stone[0];
+    var bev=(rh<1.1||cx2<1.1)?0.18:((rh>5.2||cx2>seedW-0.8)?-0.2:0);
+    var mossy=smoothN(wx*0.25,wy*0.15,seed+7)+(wy/H)*0.55;
+    if(mossy>1.02&&hsh(x,y,seed)>0.3) return rampC(R.moss,0.3+hsh(x,y,seed+2)*0.6,x,y);
+    return rampC(R.stone,(0.35+hsh(col,row,seed)*0.25+bev)*light+(hsh(x,y,seed)>0.95?0.1:0),x,y);
+  });
+  b.outline(OUTLINE);
+  return {buf:b,ox:pad*u,oy:top*u,pad:pad,top:top};
+}
+function paintSpire(w,H,seed){
+  var u=HD, pad=8, top=4, b=new PixBuf((w+pad*2)*u,(H+top)*u), R=RAMPS;
+  b.fill(function(X,Y,x,y){
+    var wx=X-pad-w/2, wy=Y-top;
+    var half=(w/2+3)*(0.55+0.45*Math.max(0,wy)/H)+(smoothN(wy*0.2,1,seed)-0.5)*4;
+    if(wy<-2+smoothN(wx*0.4,3,seed)*3||Math.abs(wx)>half) return (wy>H-4&&Math.abs(wx)<w*0.75&&wy>H-4+Math.abs(wx)*0.12)?rampC(RAMPS.rock,0.85,x,y):null;
+    var lx=wx/half, lit=0.55-lx*0.3;
+    var band=Math.floor(wy/4.5+smoothN(wx*0.1,wy*0.05,seed)*1.5), tone=hsh(band,0,seed)*0.3;
+    var crack=Math.abs(wx-(wy*0.35-10)+smoothN(wy*0.3,0,seed+4)*3)<0.5&&wy>20&&wy<H-20;
+    if(crack) return R.rock[0];
+    if(hsh(x,y,seed)>0.97) lit-=0.25;
+    if(Math.abs(wx+w*0.15)<4&&Math.abs(wy-(H*0.55))<2.5) return rampC(["#3a1a0a","#6a2e10","#9a4a1a","#c8602a"].map(hexRGB),0.5+hsh(x,y,1)*0.4,x,y);
+    return rampC(R.rock,lit+tone-0.1,x,y);
+  });
+  b.outline(OUTLINE);
+  return {buf:b,ox:pad*u,oy:top*u,pad:pad,top:top};
+}
+function paintColumn(w,H,seed){
+  var u=HD, pad=8, top=8, b=new PixBuf((w+pad*2)*u,(H+top)*u), R=RAMPS;
+  b.fill(function(X,Y,x,y){
+    var wx=X-pad, wy=Y-top, sh=w-10;
+    /* capital: gold block with scrolled ends and a row of dentils */
+    if(wy<5){ if(wy<-8||wx<-6||wx>w+6) return null;
+      for(var sd=0;sd<2;sd++){ var vx=sd?w+2:-2, vdx=wx-vx, vdy=wy+2; var rr=Math.sqrt(vdx*vdx+vdy*vdy);
+        if(rr<4.5){ var ang=Math.atan2(vdy,vdx)+rr*1.4; return rampC(R.gold,0.5+Math.sin(ang*2)*0.35,x,y); } }
+      if(wy>2&&wx%3<1.2) return R.gold[1];
+      return rampC(R.gold,0.65-wy*0.03+(wy<-6?0.2:0),x,y); }
+    /* stepped base */
+    if(wy>H-12){ var step=wy>H-5?6:(wy>H-9?3:1); if(wx<-step||wx>w+step) return null;
+      if(Math.abs(wy-(H-9))<0.7) return R.gold[3];
+      return rampC(R.marble,0.6-(wx/w)*0.3,x,y); }
+    if(wx<5||wx>w-5) return null;
+    /* fluted shaft with veins */
+    var sx=(wx-5)/sh, flute=Math.cos(sx*Math.PI*12), lit=0.75-sx*0.35+flute*0.12;
+    var vein=Math.abs(smoothN(wx*0.3,wy*0.06,seed)-0.5)<0.025;
+    if(vein) lit-=0.35;
+    return rampC(R.marble,lit,x,y);
+  });
+  b.outline(hexRGB("#3a3428"));
+  return {buf:b,ox:pad*u,oy:top*u,pad:pad,top:top};
+}
+function paintCrates(w,H,seed){
+  var u=HD, pad=2, top=0, b=new PixBuf((w+pad*2)*u,(H+top)*u), R=RAMPS, ch=H/Math.max(3,Math.round(H/22));
+  b.fill(function(X,Y,x,y){
+    var row=Math.floor(Y/ch), shift=(row%2?2:-1), wx=X-pad-shift, cy=Y-row*ch;
+    if(wx<0||wx>w) return null;
+    if(cy<0.6||cy>ch-0.6) return R.wood[0];
+    if((wx<2.2||wx>w-2.2)&&(cy<2.2||cy>ch-2.2)){ if(Math.abs((wx<2.2?wx:w-wx)-1.1)<0.45&&Math.abs((cy<2.2?cy:ch-cy)-1.1)<0.45) return R.iron[3]; return R.iron[1]; }
+    var diag=Math.abs((cy/ch)*w-wx)<1.3;
+    if(diag) return rampC(R.wood,0.75,x,y);
+    var plank=Math.floor(cy/4.2), seam=cy%4.2<0.4;
+    if(seam) return R.wood[1];
+    var grain=Math.sin(wx*0.9+smoothN(wx*0.2,plank,seed)*6)*0.08;
+    return rampC(R.wood,0.4+hsh(plank,row,seed)*0.25+grain-(wx/w)*0.15,x,y);
+  });
+  b.outline(OUTLINE);
+  return {buf:b,ox:pad*u,oy:top*u,pad:pad,top:top};
+}
+/* the step ledge: balcony, branch or stone shelf */
+function paintLedge(kind,w,seed,inner){
+  var u=HD, H=14, b=new PixBuf(w*u,H*u), R=RAMPS;
+  b.fill(function(X,Y,x,y){
+    var ox=inner>0?X:w-X;
+    if(kind==="branch"){ var thick=3.4-ox/w*1.6, cyb=5+ox*0.04;
+      if(Math.abs(Y-cyb)<thick) return rampC(R.bark,0.55-(Y-cyb)/thick*0.3+(Math.sin(ox*1.7)>0.7?-0.2:0),x,y);
+      var lx=ox-(w-7), ly=Y-3; if(lx*lx/36+ly*ly/10<1) return rampC(R.leaf,0.5-ly*0.08+hsh(x,y,seed)*0.3,x,y);
+      return null; }
+    var rail=(kind==="balcony"||kind==="gilt");
+    if(rail&&Y<4){ if(Y<1.2) return rampC(kind==="gilt"?R.gold:R.iron,0.7,x,y); if((X%4)<1.1) return rampC(kind==="gilt"?R.marble:R.iron,0.5,x,y); return null; }
+    if(Y>=4&&Y<8) return rampC(kind==="gilt"?R.marble:(kind==="balcony"?R.wood:R.stone),0.7-(Y-4)*0.1-(X%9<0.4?0.3:0),x,y);
+    var bl=8+(1-ox/12)*6; if(Y>=8&&ox<12&&Y<bl) return rampC(kind==="gilt"?R.gold:R.stone,0.35,x,y);
+    return null;
+  });
+  b.outline(OUTLINE);
+  return b.canvas();
+}
+
+/* ================= structures: sprites, damage, collapse ================= */
+var PAINT={town:paintHouse,meadow:paintTree,dungeon:paintTower,wasteland:paintSpire,palace:paintColumn,room:paintCrates};
+var LEDGEKIND={town:"balcony",meadow:"branch",palace:"gilt"};
+var RUBBLE={town:RAMPS.brick,meadow:RAMPS.bark,dungeon:RAMPS.stone,wasteland:RAMPS.rock,palace:RAMPS.marble,room:RAMPS.wood};
+function buildStructs(){
+  var W=WORLDW, key=S.room?"room":S.map, H=stageH();
+  STRUCTS=LAYOUT.structX.map(function(f,i){
+    var w=(key==="meadow")?50:62, cx=Math.round(W*f), seed=i*97+key.length*13;
+    var s={x0:cx-w/2,x1:cx+w/2,maxh:H,h:H,hp:240,maxhp:240,key:key,i:i,inner:i?-1:1,seed:seed};
+    s.roof={x0:s.x0+2,x1:s.x1-2,z:H,st:s};
+    var lz=Math.round(H*0.5);
+    s.ledge=(s.inner>0)?{x0:s.x1-6,x1:s.x1+38,z:lz,st:s}:{x0:s.x0-38,x1:s.x0+6,z:lz,st:s};
+    var p=(PAINT[key]||paintTower)(w,H,seed);
+    s.sp={img:p.buf.canvas(),buf:p.buf,pad:p.pad,top:p.top};
+    s.ledgeImg=paintLedge(LEDGEKIND[key]||"shelf",44,seed,s.inner);
+    /* where it will crack and hole as it weakens, decided up front */
+    s.cracks=[]; for(var c=0;c<5;c++){ var pts=[], x=w*(0.2+hsh(c,1,seed)*0.6), y=4+hsh(c,2,seed)*H*0.3;
+      for(var k=0;k<9;k++){ pts.push([x,y]); x+=(hsh(c,k,seed+3)-0.5)*9; y+=4+hsh(c,k,seed+4)*8; x=Math.max(2,Math.min(w-2,x)); }
+      s.cracks.push({th:0.12+c*0.16,pts:pts}); }
+    s.holes=[]; for(var hI=0;hI<3;hI++) s.holes.push({th:0.45+hI*0.15,x:w*(0.25+hsh(hI,5,seed)*0.5),y:H*(0.2+hsh(hI,6,seed)*0.55),r:3+hsh(hI,7,seed)*3});
+    s.jag=[]; for(var j=0;j<=w;j++) s.jag.push(hsh(j,8,seed)*3.2);
+    return s;
+  });
+  S.debris=[]; S.dust=[];
+}
+/* where the sprite sits in the world, and how much of the top has crumbled away */
+function spriteBox(s){
+  var img=s.sp.img, u=HD, gone=(s.h<s.maxh-0.5)?(s.maxh-s.h+s.sp.top):0;
+  return {img:img,x:s.x0-s.sp.pad,y:GROUND-s.maxh-s.sp.top,w:img.width/u,h:img.height/u,crop:gone};
+}
+function fineLine(x1,y1,x2,y2,col,col2){
+  var d=Math.max(Math.abs(x2-x1),Math.abs(y2-y1)), n=Math.ceil(d*HD), f=1/HD;
+  for(var i=0;i<=n;i++){ var t=i/n, x=x1+(x2-x1)*t, y=y1+(y2-y1)*t;
+    G.fillStyle=col; G.fillRect(Math.round(x*HD)/HD,Math.round(y*HD)/HD,f*1.6,f*1.6);
+    if(col2){ G.fillStyle=col2; G.fillRect(Math.round(x*HD)/HD+f,Math.round(y*HD)/HD+f,f,f); } }
 }
 function drawStructs(){
   STRUCTS.forEach(function(s){
-    var cx=(s.x0+s.x1)/2, w=s.x1-s.x0, P=STRUCTPAL[s.key]||STRUCTPAL.dungeon;
-    G.globalAlpha=.25; px(s.x0-4,GROUND+1,w+8,4,"#000"); G.globalAlpha=1;
-    if(s.hp<=0){
-      for(var r=0;r<6;r++){ var rw=(w+16)/6; px(s.x0-8+r*rw,GROUND-4-((r*5)%7),rw-1,4+((r*5)%7),r%2?P[1]:P[2]); }
-      return; }
-    var y=GROUND-s.h, dmg=1-s.hp/s.maxhp, k=s.key;
-    if(k==="meadow"){
-      /* trunk, then a full canopy sitting on the roof line */
-      px(cx-9,y,18,s.h,P[0]); px(cx-8,y,16,s.h,P[2]); px(cx-8,y,5,s.h,P[3]); px(cx+4,y,4,s.h,P[1]);
-      px(cx-14,GROUND-6,28,6,P[1]);
-      var cr=Math.round(30-dmg*10);
-      disc(cx,y-4,cr+1,"#16330f"); disc(cx,y-4,cr,"#2f6a24"); disc(cx-cr*0.5,y-cr*0.35,cr*0.6,"#3f7a2e"); disc(cx+cr*0.45,y-cr*0.45,cr*0.55,"#4a8a34");
-      px(s.x0,y-1,w,3,P[1]);
-    } else {
-      /* body: outline, base colour, lit left edge, shaded right edge */
-      px(s.x0-1,y,w+2,s.h,P[0]); px(s.x0,y,w,s.h,P[2]); px(s.x0,y,4,s.h,P[3]); px(s.x1-4,y,4,s.h,P[1]);
-      if(k==="town"){
-        for(var by=y+6;by<GROUND;by+=7) px(s.x0+4,by,w-8,1,P[1]);
-        for(var wy=y+12;wy<GROUND-26;wy+=28) for(var wx=s.x0+10;wx<s.x1-14;wx+=24){
-          px(wx-1,wy-1,14,16,P[0]); px(wx,wy,12,14,"#3a2414"); px(wx+1,wy+1,10,12,P[4]); px(wx+5,wy,2,14,P[0]); }
-        px(cx-7,GROUND-22,14,22,P[0]); px(cx-6,GROUND-21,12,21,"#4a2e18");
-        if(dmg<0.35){ for(var rf=0;rf<10;rf++) px(s.x0-6+rf,y-10+rf,w+12-rf*2,1,rf<2?P[0]:"#3a1e14"); }
-      } else if(k==="palace"){
-        for(var fl=s.x0+10;fl<s.x1-6;fl+=12) px(fl,y+10,2,s.h-20,P[1]);
-        px(s.x0-6,y-6,w+12,8,P[0]); px(s.x0-5,y-5,w+10,6,P[4]); px(s.x0-6,GROUND-10,w+12,10,P[1]);
-      } else if(k==="room"){
-        for(var cy2=GROUND-24;cy2>y-1;cy2-=24){ px(s.x0,cy2,w,1,P[0]); px(s.x0+6,cy2+4,w-12,16,P[1]); stroke(s.x0+6,cy2+4,s.x1-6,cy2+20,2,P[3]); }
-      } else if(k==="wasteland"){
-        for(var st=y+8;st<GROUND;st+=12) px(s.x0+4,st,w-8,2,P[1]);
-        px(s.x0+8,y+14,6,4,P[4]); px(s.x1-16,y+40,6,4,P[4]);
-      } else {
-        for(var ty=y;ty<GROUND;ty+=12){ var off=((ty/12)|0)%2?10:0;
-          for(var tx=s.x0+off;tx<s.x1;tx+=20) px(tx,ty,1,12,P[0]); px(s.x0,ty,w,1,P[0]); }
-        if(dmg<0.35) for(var bt=0;bt<w;bt+=12) px(s.x0+bt,y-6,8,6,P[2]);
-        px(cx-2,y+18,4,8,P[4]); G.globalAlpha=.15; disc(cx,y+22,14,P[4]); G.globalAlpha=1;
-      }
-    }
-    if(s.h>s.ledge.z+10) drawLedge(s,P);
-    /* wear: a broken top edge and cracks that spread as it weakens */
-    if(dmg>0.15) for(var j=0;j<w;j+=6) px(s.x0+j,y-((j*7)%5),6,2+((j*7)%5),P[0]);
-    if(dmg>0.35){ stroke(cx-4,y+8,cx+6,y+s.h*0.35,1.5,P[0]); }
-    if(dmg>0.65){ stroke(s.x0+8,y+s.h*0.3,s.x0+16,y+s.h*0.7,1.5,P[0]); stroke(s.x1-10,y+s.h*0.2,s.x1-6,y+s.h*0.55,1.5,P[0]); }
+    var B=spriteBox(s), u=HD, w=s.x1-s.x0, R=RUBBLE[s.key]||RAMPS.stone;
+    if(s.gone){ drawRubble(s); return; }
+    if(s.coll){ /* toppling: the whole sprite tilts around its base corner */
+      G.save(); G.translate(s.coll.px,GROUND); G.rotate(s.coll.ang*s.coll.dir);
+      G.drawImage(B.img,0,B.crop*u,B.img.width,B.img.height-B.crop*u,B.x-s.coll.px,B.y+B.crop-GROUND,B.w,B.h-B.crop);
+      G.restore(); return; }
+    G.globalAlpha=.3; px(s.x0-6,GROUND+1,w+12,4,"#000"); G.globalAlpha=1;
+    G.drawImage(B.img,0,B.crop*u,B.img.width,B.img.height-B.crop*u,B.x,B.y+B.crop,B.w,B.h-B.crop);
+    var dmg=1-s.hp/s.maxhp, wallTop=GROUND-s.maxh, cut=GROUND-s.h;
+    /* cracks and holes, from a cached overlay that's rebuilt only when more appear */
+    var ov=damageOverlay(s,dmg);
+    if(ov) G.drawImage(ov,0,B.crop*u,ov.width,ov.height-B.crop*u,B.x,B.y+B.crop,B.w,B.h-B.crop);
+    /* a broken, toothed top once anything has crumbled off */
+    if(s.h<s.maxh-0.5) for(var j=0;j<w;j++){ var jh=s.jag[j]; var col=rampC(R,0.3+hsh(j,1,s.seed)*0.5,j,0);
+      G.fillStyle="rgb("+(col[0]|0)+","+(col[1]|0)+","+(col[2]|0)+")"; G.fillRect(s.x0+j,cut-jh,1,jh+1);
+      G.fillStyle="#0a0608"; G.fillRect(s.x0+j,cut-jh-1/u,1,1/u); }
+    if(s.h>s.ledge.z+10){ var L=s.ledge, off=(LEDGEKIND[s.key]==="branch")?2:4;
+      G.drawImage(s.ledgeImg,L.x0,GROUND-L.z-off,44,14); }
     var h=S.hero;
     if(h&&CLIMBERS[h.id]&&h.st!=="climb"&&h.x>=s.x0-6&&h.x<=s.x1+6&&h.z<s.h-8){
       G.font="6px 'Press Start 2P',monospace"; G.textAlign="center";
-      G.fillStyle="#000"; G.fillText("▲ CLIMB",cx+1,y-15); G.fillStyle="#fff"; G.fillText("▲ CLIMB",cx,y-16); }
+      G.fillStyle="#000"; G.fillText("▲ CLIMB",(s.x0+s.x1)/2+1,cut-15); G.fillStyle="#fff"; G.fillText("▲ CLIMB",(s.x0+s.x1)/2,cut-16); }
   });
+}
+function damageOverlay(s,dmg){
+  var key=s.cracks.filter(function(c){ return dmg>=c.th; }).length*10+s.holes.filter(function(h){ return dmg>=h.th; }).length;
+  if(!key) return null;
+  if(s.ovKey===key) return s.ov;
+  var u=HD, B=s.sp, b=new PixBuf(B.img.width,B.img.height), dark=hexRGB("#0a0608"), lite=[235,225,210];
+  var X=function(x){ return Math.round((x+B.pad)*u); }, Y=function(y){ return Math.round((y+B.top)*u); };
+  s.cracks.forEach(function(c){ if(dmg<c.th) return;
+    for(var k=1;k<c.pts.length;k++){ var a=c.pts[k-1], d=c.pts[k], n=Math.ceil(Math.max(Math.abs(d[0]-a[0]),Math.abs(d[1]-a[1]))*u);
+      for(var i=0;i<=n;i++){ var x=X(a[0]+(d[0]-a[0])*i/n), y=Y(a[1]+(d[1]-a[1])*i/n);
+        if(!B.buf.on(x,y)) continue; b.set(x,y,dark); b.set(x+1,y,dark); if(B.buf.on(x+2,y+1)) b.set(x+2,y+1,lite); } } });
+  s.holes.forEach(function(hl){ if(dmg<hl.th) return;
+    var r=hl.r*u, cx=X(hl.x), cy=Y(hl.y);
+    for(var yy=-r;yy<=r;yy++){ var hw=Math.sqrt(Math.max(0,r*r-yy*yy))*(0.8+hsh(yy,3,s.seed)*0.35);
+      for(var xx=-hw;xx<=hw;xx++){ var x=Math.round(cx+xx), y=Math.round(cy+yy); if(!B.buf.on(x,y)) continue;
+        b.set(x,y,(xx<-hw+1.5||yy<-r+1.5)?lite:dark); } } });
+  s.ovKey=key; s.ov=b.canvas(); return s.ov;
+}
+function makeRubble(s){
+  var R=RUBBLE[s.key]||RAMPS.stone, u=HD, w=s.x1-s.x0, W=w+30, Hh=16, b=new PixBuf(W*u,Hh*u);
+  b.fill(function(X,Y,x,y){ var hgt=(1-Math.abs((X-W/2)/(W/2)))*12+smoothN(X*0.35,0,s.seed)*5-2, yy=Hh-Y;
+    if(yy>hgt||hgt<=0) return null;
+    var lump=smoothN(X*0.6,yy*0.6,s.seed+1); return rampC(R,0.2+lump*0.65,x,y); });
+  b.outline(OUTLINE); return b.canvas();
+}
+function drawRubble(s){
+  if(!s.rub) s.rub=makeRubble(s);
+  var w=s.x1-s.x0, base=s.x0+s.coll.dir*14;
+  G.drawImage(s.rub,base-15,GROUND-16+1,w+30,16);
+}
+function drawRubbleOld(s){
+  var R=RUBBLE[s.key]||RAMPS.stone, u=HD, w=s.x1-s.x0, base=s.x0+s.coll.dir*14;
+  for(var i=0;i<w+30;i+=1/u){ var hgt=Math.max(0,(1-Math.abs((i-(w+30)/2)/((w+30)/2)))*12+smoothN(i*0.35,0,s.seed)*5-2);
+    if(hgt<=0) continue;
+    for(var y=0;y<hgt;y+=1/u){ var col=rampC(R,0.25+smoothN(i*0.6,y*0.6,s.seed+1)*0.6-(y<0.6?0.2:0),Math.round(i*u),Math.round(y*u));
+      if(y>hgt-1/u-0.01) col=OUTLINE;
+      G.fillStyle="rgb("+(col[0]|0)+","+(col[1]|0)+","+(col[2]|0)+")"; G.fillRect(base-15+i,GROUND-y-1/u,1/u,1/u); } }
+}
+/* bits of the sprite itself: chips on hits, everything on a collapse */
+function chipsFrom(s,lx,ly,n,spread,big){
+  var u=HD, B=s.sp;
+  for(var i=0;i<n;i++){ var sz=(big?4:2)+Math.random()*(big?4:2), sx=lx+B.pad+(Math.random()-.5)*6, sy=ly+B.top+(Math.random()-.5)*6;
+    var px2=Math.round(sx*u), py2=Math.round(sy*u);
+    if(!B.buf.on(px2,py2)) continue;
+    S.debris.push({img:B.img,sx:px2,sy:py2,sw:Math.round(sz*u),sh:Math.round(sz*u),w:sz,h:sz,
+      x:s.x0+lx,y:GROUND-s.maxh+ly,vx:(Math.random()-.5)*spread,vy:-1.5-Math.random()*3,rot:0,vr:(Math.random()-.5)*0.4,life:50+Math.random()*30,b:0}); }
+}
+function puff(x,y,n,col){ for(var i=0;i<n;i++) S.dust.push({x:x+(Math.random()-.5)*20,y:y-Math.random()*10,r:4+Math.random()*6,
+  vx:(Math.random()-.5)*1.2,vy:-0.2-Math.random()*0.5,life:50+Math.random()*40,max:90,c:col||"#b8a890"}); }
+function hurtStruct(s,amt,fromX){
+  if(s.hp<=0||s.coll) return;
+  var before=s.h;
+  s.hp-=amt;
+  s.h=Math.max(18,Math.round(s.maxh*(0.4+0.6*Math.max(0,s.hp)/s.maxhp)));
+  s.roof.z=s.h;
+  if(s.h<before){ chipsFrom(s,(s.x1-s.x0)*Math.random(),s.maxh-s.h,Math.min(8,(before-s.h)*2),3,true); puff((s.x0+s.x1)/2,GROUND-s.h,2); }
+  if(amt>=8&&fromX!=null){ var lx=Math.max(1,Math.min(s.x1-s.x0-1,fromX-s.x0)); chipsFrom(s,lx,s.maxh-34,5,5,false); }
+  if(s.hp<=0){ s.hp=0; beginCollapse(s); }
+}
+function beginCollapse(s){
+  /* it always falls toward the middle of the arena, where the fighting is */
+  s.coll={t:0,ang:0,va:0.006,dir:s.inner,px:(s.inner>0?s.x1:s.x0)};
+  callout("IT'S COMING DOWN!",900); SFX.warn(); shake(6);
+  puff(s.coll.px,GROUND,6);
+  var h=S.hero; if(h&&(h.onPlat===s.roof||h.onPlat===s.ledge||h.clS===s)){ h.onPlat=null; h.clS=null; if(h.st==="climb") h.st="idle"; h.vz=1.5; }
+}
+function shatter(s){
+  var c=s.coll, B=spriteBox(s), u=HD, th=c.ang*c.dir, cs=Math.cos(th), sn=Math.sin(th), om=c.va*c.dir;
+  var step=7, cols=Math.ceil(B.w/step), rows=Math.ceil((B.h-B.crop)/step);
+  for(var r=0;r<rows;r++) for(var k=0;k<cols;k++){
+    var lx=k*step+step/2, ly=B.crop+r*step+step/2;
+    if(!s.sp.buf.on(Math.round(lx*u),Math.round(ly*u))) continue;
+    var ox=B.x+lx-c.px, oy=B.y+ly-GROUND, wx=c.px+ox*cs-oy*sn, wy=GROUND+ox*sn+oy*cs;
+    S.debris.push({img:B.img,sx:Math.round(k*step*u),sy:Math.round((B.crop+r*step)*u),sw:Math.round(step*u),sh:Math.round(step*u),w:step,h:step,
+      x:wx,y:wy,vx:-om*(wy-GROUND)*0.9+(Math.random()-.5)*3,vy:om*(wx-c.px)*0.9-1-Math.random()*3,rot:th,vr:(Math.random()-.5)*0.35,life:90+Math.random()*50,b:0});
+  }
+  s.gone=1;
+  shake(20); flashScreen(.35); SFX.big(); setTimeout(function(){ SFX.big(); },90); setTimeout(function(){ SFX.big(); },200);
+  var reach=c.px+c.dir*s.maxh*0.95;
+  for(var d=0;d<14;d++) puff(c.px+(reach-c.px)*(d/13),GROUND,2);
+  /* anything it lands on gets crushed */
+  var lo=Math.min(c.px,reach), hi=Math.max(c.px,reach), b=S.boss;
+  if(b&&b.hp>0&&S.mode!=="pvp"&&!(S.mode==="coop"&&NET.role!=="host")&&b.x>lo-20&&b.x<hi+20){
+    b.hp-=150; b.flash=14; b.cd=Math.max(b.cd||0,90); popNum(b.x,b.fy-110,"CRUSHED! 150","#ffd23f"); callout("CRUSHED!",1100);
+    if(b.hp<=0){ b.hp=0; endGame(true); } }
+  var h=S.hero; if(h&&h.hp>0&&h.x>lo&&h.x<hi&&h.z<40) damageHero(25,5);
+}
+function updCollapse(){
+  STRUCTS.forEach(function(s){ var c=s.coll; if(!c||s.gone) return;
+    c.t++; c.va+=0.0024; c.ang+=c.va;
+    if(c.t%6===0) puff(c.px,GROUND,1);
+    if(c.ang>=1.2) shatter(s); });
+  var D=S.debris||[];
+  for(var i=D.length-1;i>=0;i--){ var p=D[i];
+    p.vy+=0.32; p.x+=p.vx; p.y+=p.vy; p.rot+=p.vr; p.life--;
+    if(p.y+p.h/2>GROUND){ p.y=GROUND-p.h/2; if(p.b<3){ p.vy*=-0.34; p.vx*=0.6; p.vr*=0.5; p.b++; if(p.b===1&&Math.random()<0.3) puff(p.x,GROUND,1); } else { p.vy=0; p.vx*=0.8; p.vr=0; } }
+    if(p.life<=0) D.splice(i,1); }
+  var U=S.dust||[];
+  for(var j=U.length-1;j>=0;j--){ var q=U[j]; q.x+=q.vx; q.y+=q.vy; q.r+=0.25; q.life--; if(q.life<=0) U.splice(j,1); }
+}
+function drawDebris(){
+  (S.debris||[]).forEach(function(p){
+    G.globalAlpha=Math.min(1,p.life/25); G.save(); G.translate(p.x,p.y); G.rotate(p.rot);
+    G.drawImage(p.img,p.sx,p.sy,p.sw,p.sh,-p.w/2,-p.h/2,p.w,p.h); G.restore(); });
+  G.globalAlpha=1;
+}
+function drawDust(){
+  (S.dust||[]).forEach(function(q){ var a=Math.min(1,q.life/q.max)*0.32;
+    G.globalAlpha=a; G.fillStyle=q.c; G.beginPath(); G.arc(q.x,q.y,q.r,0,Math.PI*2); G.fill();
+    G.globalAlpha=a*0.6; G.fillStyle="#e8dcc8"; G.beginPath(); G.arc(q.x-q.r*0.3,q.y-q.r*0.3,q.r*0.55,0,Math.PI*2); G.fill(); });
+  G.globalAlpha=1;
+}
+/* the boss erodes whatever he fights next to */
+function updStructs(){
+  var b=S.boss; if(!b||b.hp<=0||S.mode==="pvp") return;
+  liveStructs().forEach(function(s){ if(s.coll) return;
+    if(Math.abs(b.x-(s.x0+s.x1)/2)<90){ hurtStruct(s,0.07); if(S.frames%50===0) chipsFrom(s,(s.x1-s.x0)*Math.random(),s.maxh-s.h+2,1,2,false); } });
+}
+function quakeStructs(x,amt){ liveStructs().forEach(function(s){ if(!s.coll&&Math.abs(x-(s.x0+s.x1)/2)<110) hurtStruct(s,amt,x); }); }
+/* heroes can break them too */
+function heroHitsStructs(h){
+  var c=h.c, reach=Math.max(30,(c.lightRange||44)*0.7);
+  liveStructs().forEach(function(s){ if(s.coll) return;
+    var dx=h.x<s.x0?s.x0-h.x:(h.x>s.x1?h.x-s.x1:0);
+    if(dx<reach&&h.z<s.h) hurtStruct(s,Math.round((c.light||20)*0.75),Math.max(s.x0,Math.min(s.x1,h.x+h.dir*8))); });
 }
 
 /* ================= doors & rooms ================= */
@@ -3054,7 +3377,7 @@ function diveImpact(h){
   shake(11); flashScreen(.25); SFX.big();
   ring(h.x+h.dir*8,GROUND,"#ffb03a"); ring(h.x+h.dir*8,GROUND-6,"#fff4c2");
   spark(h.x+h.dir*8,GROUND-4,20,"#ffb03a",8,4); spark(h.x+h.dir*8,GROUND-4,10,"#a89a80",6,3);
-  S.crater={x:h.x+h.dir*8,life:120};
+  S.crater={x:h.x+h.dir*8,life:120}; quakeStructs(h.x,30);
   hitSentries(h.x,50,40);
   if(b&&b.hp>0&&Math.abs(b.x-h.x)<reach&&(b.z||0)<30) damageBoss(42,4.5);
 }
@@ -3117,6 +3440,7 @@ function updHero(){
   if(h.st==="attack"){
     /* any punch thrown right next to it counts, whichever way you're facing */
     if(h.t===c.hitFrame&&h.z<30&&Math.abs(h.x-doorX())<44) secretHit();
+    if(h.t===c.hitFrame) heroHitsStructs(h);
     if(h.t===c.hitFrame){
       if(c.ranged){
         S.shots.push({x:h.x+h.dir*16*sc,y:h.fy-38*sc,vx:h.dir*(c.shot==="web"?8:7),
@@ -3278,7 +3602,7 @@ function runSpecial(h){
       S.crater={x:gx,life:160};
       S.shots.push({x:gx,y:GROUND-10,vx:h.dir*5.2,kind:"quake",dmg:22,life:80});
       S.shots.push({x:gx,y:GROUND-10,vx:-h.dir*5.2,kind:"quake",dmg:22,life:60});
-      hitSentries(gx,60,h.c.spDmg);
+      hitSentries(gx,60,h.c.spDmg); quakeStructs(gx,45);
       if(b.hp>0&&Math.abs(b.x-gx)<tgtHalf()+46&&(b.z||0)<30) damageBoss(h.c.spDmg,4.5);
     }
     if(t>40){h.st="idle";h.t=0;}
@@ -4304,7 +4628,7 @@ function step(){ S.frames++; S.maxCombo=Math.max(S.maxCombo||0,S.combo||0);
     if(NET.role==="host"){ updBoss(); if(S.frames%2===0) sendBoss(); } else mirrorBoss();
     updSentries(); coopRevive();
   } else if(S.mode!=="pvp"){ updBoss(); updSentries(); updStory(); }
-  updDoor(); updStructs(); updCtxBtn();
+  updDoor(); updStructs(); updCollapse(); updCtxBtn();
   updShots(); updFx(); updCam();
   if(S.shake>0)S.shake*=.82; }
 function titleCast(){
@@ -4353,6 +4677,7 @@ function previewStage(){
   G.globalAlpha=.85; drawHero(S.pv); G.globalAlpha=1;
 }
 function render(){
+  G.setTransform(HD,0,0,HD,0,0); G.imageSmoothingEnabled=false;
   G.save();
   if(S.shake>.4) G.translate(Math.round((Math.random()-.5)*S.shake*2.4),Math.round((Math.random()-.5)*S.shake*1.4));
   G.translate(-Math.round(S.scene==="fight"?(S.cam||0):0),0);
@@ -4367,7 +4692,7 @@ function render(){
   if(S.scene==="fight"&&S.mode!=="pvp") drawSentries();
   if(S.scene==="fight") drawGhosts();
   if(S.hero&&S.scene!=="title"&&S.scene!=="dialog") drawHero(S.hero);
-  drawFx(); if(S.scene==="fight"){ drawForeground(); drawTrainHud(); drawSays(); drawRevive(); drawCoopHud(); }
+  drawFx(); if(S.scene==="fight"){ drawDust(); drawForeground(); drawTrainHud(); drawSays(); drawRevive(); drawCoopHud(); }
   G.restore();
 }
 var last=0,acc=0;
@@ -4386,8 +4711,9 @@ function resize(){
   var cw=Math.max(200,window.innerWidth), ch=Math.max(200,window.innerHeight);
   UNIT=Math.min(cw/300,ch/210);
   WW=Math.max(300,Math.round(cw/UNIT)); WH=Math.max(210,Math.round(ch/UNIT));
-  CV.width=WW; CV.height=WH;
-  G=CV.getContext('2d'); G.imageSmoothingEnabled=false;
+  HD=Math.max(2,Math.min(4,Math.round(UNIT*(window.devicePixelRatio||1))));
+  CV.width=WW*HD; CV.height=WH*HD;
+  G=CV.getContext('2d'); G.imageSmoothingEnabled=false; G.setTransform(HD,0,0,HD,0,0);
   GROUND=WH-Math.round(Math.max(28,Math.min(118,WH*0.185)));
   WORLDW=(online()&&PVPW)?Math.max(PVPW,WW):Math.round(WW*2.4);
   buildMap();
