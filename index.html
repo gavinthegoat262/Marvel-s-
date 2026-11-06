@@ -2164,6 +2164,7 @@ var PLATSTYLE={dungeon:["#3a2c46","#54425f","#1b1326","#2a2130"],meadow:["#6a4a2
 function drawPlats(){
   var st=PLATSTYLE[S.map]||PLATSTYLE.dungeon;
   for(var i=0;i<PLATS.length;i++){ var p=PLATS[i], y=GROUND-p.z, w=p.x1-p.x0;
+    if(p.noDraw) continue;
     G.globalAlpha=.22; px(p.x0+6,GROUND+1,w-12,3,"#000"); G.globalAlpha=1;
     /* supports: chains on stone, posts on wood, struts on metal */
     if(S.map==="dungeon"||S.map==="palace"){ for(var c=0;c<2;c++){ var cx=p.x0+14+c*(w-28); for(var k=0;k<y;k+=6) px(cx,k,2,4,st[3]); } }
@@ -2386,14 +2387,17 @@ var STRUCTS=[], CLIMBERS={weaver:1,goliath:1,ironclad:1};
 function liveStructs(){ return STRUCTS.filter(function(s){ return s.hp>0; }); }
 /* every surface you can land on: floating platforms and standing rooftops */
 /* the boss erodes whatever he's standing next to, and his big hits land on structures too */
+function canClimb(h,s){ return !!(s&&(CLIMBERS[h.id]||s.key==="meadow"||s.key==="ladder")); }
+function climbTarget(h){ var s=structAt(h); return canClimb(h,s)?s:null; }
 function structAt(h){
-  var L=liveStructs();
+  var L=liveStructs(); if(TH&&TH.ladder&&!S.room) L=L.concat([TH.ladder]);
   for(var i=0;i<L.length;i++){ var s=L[i]; if(h.x>=s.x0-6&&h.x<=s.x1+6&&h.z<s.h-8) return s; }
   return null;
 }
 function startClimb(h,s){ h.st="climb"; h.t=0; h.clS=s; h.vz=0; h.onPlat=null; SFX.jump(); }
 function updClimb(h){
   var s=h.clS;
+  if(s&&s.key==="ladder"){ h.x=Math.max(s.x0,Math.min(s.x1,h.x)); }
   if(!s||s.hp<=0){ h.st="idle"; h.clS=null; return; }
   var sp=(h.id==="goliath")?1.5:2;
   if(IN.hold){ h.z+=sp; var g0=Math.floor((h.clD||0)/9); h.clD=(h.clD||0)+sp;
@@ -2426,7 +2430,7 @@ function updCtxBtn(){
   if(h&&S.scene==="fight"&&h.hp>0){
     if(h.st==="swing") lab="LET GO";
     else if(h.st==="climb") lab="CLIMB";
-    else if(CLIMBERS[h.id]&&structAt(h)) lab="CLIMB";
+    else if(climbTarget(h)) lab="CLIMB";
     else if(h.id==="weaver"&&nearAnchor(h)) lab="SWING";
   }
   if(lab!==ctxOn){ ctxOn=lab; var el=document.getElementById('bCtx');
@@ -2681,8 +2685,9 @@ var LEDGEKIND={town:"balcony",meadow:"branch",palace:"gilt"};
 var RUBBLE={town:RAMPS.brick,meadow:RAMPS.bark,dungeon:RAMPS.stone,wasteland:RAMPS.rock,palace:RAMPS.marble,room:RAMPS.wood};
 function buildStructs(){
   var W=WORLDW, key=S.room?"room":S.map, H=stageH();
+  if(key==="meadow") H=Math.round(H*1.25);
   STRUCTS=LAYOUT.structX.map(function(f,i){
-    var w=(key==="meadow")?50:62, cx=Math.round(W*f), seed=i*97+key.length*13;
+    var w=(key==="meadow")?56:62, cx=Math.round(W*f), seed=i*97+key.length*13;
     var s={x0:cx-w/2,x1:cx+w/2,maxh:H,h:H,hp:240,maxhp:240,key:key,i:i,inner:i?-1:1,seed:seed};
     s.roof={x0:s.x0+2,x1:s.x1-2,z:H,st:s};
     var lz=Math.round(H*0.5);
@@ -2733,7 +2738,7 @@ function drawStructs(){
     if(s.h>s.ledge.z+10){ var L=s.ledge, off=(LEDGEKIND[s.key]==="branch")?2:4;
       G.drawImage(s.ledgeImg,L.x0,GROUND-L.z-off,44,14); }
     var h=S.hero;
-    if(h&&CLIMBERS[h.id]&&h.st!=="climb"&&h.x>=s.x0-6&&h.x<=s.x1+6&&h.z<s.h-8){
+    if(h&&canClimb(h,s)&&h.st!=="climb"&&h.st!=="mantle"&&h.x>=s.x0-6&&h.x<=s.x1+6&&h.z<s.h-8){
       G.font="6px 'Press Start 2P',monospace"; G.textAlign="center";
       G.fillStyle="#000"; G.fillText("▲ CLIMB",(s.x0+s.x1)/2+1,cut-15); G.fillStyle="#fff"; G.fillText("▲ CLIMB",(s.x0+s.x1)/2,cut-16); }
   });
@@ -2853,10 +2858,15 @@ function drawDust(){
 /* the boss erodes whatever he fights next to */
 function updStructs(){
   var b=S.boss; if(!b||b.hp<=0||S.mode==="pvp") return;
+  var h=S.hero;
   liveStructs().forEach(function(s){ if(s.coll) return;
-    if(Math.abs(b.x-(s.x0+s.x1)/2)<90){ hurtStruct(s,0.07); if(S.frames%50===0) chipsFrom(s,(s.x1-s.x0)*Math.random(),s.maxh-s.h+2,1,2,false); } });
+    /* stay up there too long and he starts tearing it down */
+    var up=h&&h.hp>0&&(h.onPlat===s.roof||h.onPlat===s.ledge||(h.st==="climb"&&h.clS===s));
+    s.campT=up?(s.campT||0)+1:Math.max(0,(s.campT||0)-2);
+    if(s.campT===180) callout(s.key==="meadow"?"VORAK IS TEARING THE TREE DOWN!":"VORAK IS TEARING IT DOWN!",1300);
+    if(Math.abs(b.x-(s.x0+s.x1)/2)<90){ hurtStruct(s,s.campT>180?0.45:0.07); if(S.frames%50===0) chipsFrom(s,(s.x1-s.x0)*Math.random(),s.maxh-s.h+2,1,2,false); } });
 }
-function quakeStructs(x,amt){ liveStructs().forEach(function(s){ if(!s.coll&&Math.abs(x-(s.x0+s.x1)/2)<110) hurtStruct(s,amt,x); }); }
+function quakeStructs(x,amt){ liveStructs().forEach(function(s){ if(!s.coll&&Math.abs(x-(s.x0+s.x1)/2)<110) hurtStruct(s,amt*((s.campT||0)>180?3:1),x); }); }
 /* heroes can break them too */
 function heroHitsStructs(h){
   var c=h.c, reach=Math.max(30,(c.lightRange||44)*0.7);
@@ -2969,11 +2979,11 @@ function makeTree(kind,h,seed,sky,mix){
 /* the big climbable meadow tree, in the same clumped style */
 function paintTree(w,H,seed){
   var pad=20, top=4, cw=w+pad*2, b=new PixBuf(cw*TD,(H+top)*TD,TD), R=RAMPS, L=R.leaf, Bk=R.bark;
-  var cx=cw/2, rx=cw/2-8, ry=21, ccy=top+20, C=makeClumps(cx,ccy,rx,ry,seed,1.9);
+  var cx=cw/2, rx=cw/2-3, ry=30, ccy=top+28, C=makeClumps(cx,ccy,rx,ry,seed,1.9);
   b.fill(function(X,Y,x,y){
     var c=clumpPixel(X,Y,C,L,cx,ccy,rx,ry,seed); if(c){ if(hsh(x>>1,y>>1,seed+5)>0.998) return hexRGB("#d83a2a"); return c; }
-    var by=Y-top, half=6+Math.max(0,(by-(H-10)))*0.9;
-    if(by>18&&Math.abs(X-cx)<half&&by<H){
+    var by=Y-top, half=8+Math.max(0,(by-(H-10)))*0.9;
+    if(by>26&&Math.abs(X-cx)<half&&by<H){
       var lx=X-cx;
       if(Math.abs(lx-2)<1.5&&Math.abs(by-46)<2) return Bk[0];
       if((x+Math.round(y*0.25))%6===0) return Bk[1];
@@ -3022,8 +3032,8 @@ function buildWorldTrees(){
   if(!kinds) return;
   var sky=hexRGB("#9ad8f0"), xs=S.map==="meadow"?[0.95]:[0.08,0.93];
   /* in the meadow the grab points are branches of two tall trees */
-  if(S.map==="meadow") ANCH.forEach(function(a,i){ WTREES.push({x:a.x-12,img:makeTree("oak",a.z+36,i*53+19,sky,0),tall:1}); });
-  xs.forEach(function(f,i){ var k=kinds[i%kinds.length], h=k==="dead"?52:(S.map==="meadow"?78:60);
+  if(S.map==="meadow") ANCH.forEach(function(a,i){ WTREES.push({x:a.x-12,img:makeTree("oak",a.z+60,i*53+19,sky,0),tall:1}); });
+  xs.forEach(function(f,i){ var k=kinds[i%kinds.length], h=k==="dead"?52:(S.map==="meadow"?130:60);
     WTREES.push({x:Math.round(WORLDW*f),img:makeTree(k,h,i*31+7,sky,0)}); });
 }
 function drawWorldTrees(){
@@ -3100,24 +3110,30 @@ function buildMeadowLayers(){
   var sky=hexRGB("#9ad8f0");
   MLAY=[
     makeMountains(0.06,GROUND-28,sky,0.42,5),
-    makeLayer(0.22,GROUND-22,46,24,34,["pine","oak","pine"],sky,0.45,"#5a9a62",23),
-    makeLayer(0.45,GROUND-8,95,40,58,["oak","birch","pine"],sky,0.18,"#3a8444",37)];
+    makeLayer(0.22,GROUND-22,62,40,58,["pine","oak","pine"],sky,0.45,"#5a9a62",23),
+    makeLayer(0.45,GROUND-8,130,80,120,["oak","birch","pine"],sky,0.18,"#3a8444",37)];
 }
 /* ---- the treehouse: a big oak near the edge with a little house in it ---- */
 var TH=null;
 function buildTreehouse(){
   TH=null; if(S.map!=="meadow"||S.room) return;
   var x=doorX(), sky=hexRGB("#9ad8f0"), floor=Math.round(stageH()*0.62);
-  TH={x:x,floor:floor,img:makeTree("oak",floor+78,777,sky,0),
-      deck:{x0:x-34,x1:x+30,z:floor}};
+  TH={x:x,floor:floor,img:makeTree("oak",floor+118,777,sky,0),
+      deck:{x0:x-34,x1:x+30,z:floor,noDraw:1}};
+  /* the ladder up the trunk: anyone can climb it to the deck */
+  TH.ladder={x0:x-18,x1:x-4,h:floor,maxh:floor,hp:1,maxhp:1,roof:TH.deck,key:"ladder",ledge:{z:0},sp:null};
 }
 function drawTreehouse(){
   if(!TH) return;
-  var x=TH.x, fy=GROUND-TH.floor, im=TH.img;
+  var x=TH.x, fy=GROUND-TH.floor, im=TH.img, hh=S.hero;
+  if(S.scene==="fight"&&hh&&hh.st!=="climb"&&hh.st!=="mantle"&&hh.x>=TH.ladder.x0-6&&hh.x<=TH.ladder.x1+6&&hh.z<TH.floor-8){
+    TH.prompt=1; } else TH.prompt=0;
   G.drawImage(im,Math.round(x-im.gw/2),GROUND-im.gh+2,im.gw,im.gh);
   /* ladder up the trunk */
   for(var r=fy+6;r<GROUND-2;r+=6){ px(x-15,r,10,2,"#2e1a1c"); px(x-15,r,10,1,"#86603a"); }
   px(x-16,fy+2,2,GROUND-fy-2,"#2e1a1c"); px(x-7,fy+2,2,GROUND-fy-2,"#2e1a1c");
+  if(TH.prompt){ G.font="6px 'Press Start 2P',monospace"; G.textAlign="center";
+    G.fillStyle="#000"; G.fillText("▲ CLIMB",x-10,fy-41); G.fillStyle="#fff"; G.fillText("▲ CLIMB",x-10,fy-42); }
   /* deck with posts and a rail */
   px(x-35,fy-1,66,5,"#1a0e18"); px(x-34,fy,64,3,"#7a5434"); px(x-34,fy,64,1,"#9a7448");
   for(var k=0;k<64;k+=8) px(x-34+k,fy+1,1,2,"#4a2e22");
@@ -3597,7 +3613,7 @@ function updHero(){
     if(!IN.block&&!dashing){ var mv=mvd;
       if(mv!==0){ h.x+=mv*c.spd*1.12*((h.netSlow>0)?0.5:1); h.st="walk"; } }
     if(IN.jump&&IN.block&&h.onPlat){ h.onPlat=null; h.dropT=14; h.vz=-1.5; }
-    else if(IN.jump&&CLIMBERS[h.id]&&!h.onPlat&&structAt(h)){ startClimb(h,structAt(h)); }
+    else if(IN.jump&&!h.onPlat&&climbTarget(h)){ startClimb(h,climbTarget(h)); }
     else if(IN.jump&&(h.z===0||h.onPlat||h.coy>0)){ h.vz=7.4; h.onPlat=null; h.coy=0; SFX.jump(); spark(h.x,h.fy,4,"#cfc3b0",2,1); }
     else if(IN.jump&&h.id==="weaver"&&nearAnchor(h)){ startSwing(h,nearAnchor(h)); }
     else if(IN.jump&&!c.fly&&h.z>3&&!(h.jumps>0)){ h.jumps=1; h.vz=6.6; SFX.jump(); ring(h.x,h.fy,"#cfe8ff"); }
