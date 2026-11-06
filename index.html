@@ -1848,6 +1848,8 @@ function buildDungeon(){
 function drawBG(){
   var WW=WORLDW;
   if(DUN) G.drawImage(DUN,0,0);
+  /* push the painted backdrop back a little so the things you can use stand out */
+  if(S.scene==="fight"){ G.globalAlpha=0.3; px(0,0,WW,GROUND,"#0a0612"); G.globalAlpha=1; }
   // torch flames + glow
   for(var i=0;i<TORCH.length;i++){
     var t=TORCH[i], f=S.frames*0.2+i*3;
@@ -1905,7 +1907,7 @@ function drawBG(){
     }
     G.globalAlpha=.30; px(0,0,WW,30,"#000"); px(0,WH-30,WW,30,"#000"); G.globalAlpha=1;
   }
-  drawAtmos(); drawStructs(); drawDoor(); drawAnchors(); drawPlats(); drawAmbient();
+  drawAtmos(); drawStructs(); drawDoor(); drawAnchors(); drawPlats(); drawStandLines(); drawAmbient();
 }
 
 /* ================= story mode ================= */
@@ -2204,12 +2206,6 @@ function storyEnd(won){
 /* ================= demo: movement, platforms, feel ================= */
 var PLATS=[];
 /* floating platforms, placed the same way on every screen size */
-function buildPlats(){
-  var W=WORLDW, d=Math.round(WORLDW*0.5);
-  PLATS=[{x0:Math.round(W*0.16),x1:Math.round(W*0.16)+86,z:60},
-         {x0:d-44,x1:d+44,z:96},
-         {x0:Math.round(W*0.84)-86,x1:Math.round(W*0.84),z:60}];
-}
 var PLATSTYLE={dungeon:["#3a2c46","#54425f","#1b1326","#2a2130"],meadow:["#6a4a26","#8a6234","#3a2814","#3f7a2e"],
   wasteland:["#4a3a30","#6a5444","#241a14","#8a3a1a"],town:["#6a4420","#8a5a2c","#2a1a0e","#4a2e18"],
   palace:["#d8d0c0","#ffffff","#8a8070","#e0c256"]};
@@ -2230,7 +2226,7 @@ function drawPlats(){
 function drawForeground(){
   var cm=S.cam||0, k=0.4, key=S.room?"room":S.map;
   var col={dungeon:"#08050c",meadow:"#0e2a10",wasteland:"#120a06",town:"#140c08",palace:"#1a1020",room:"#060408"}[key]||"#060408";
-  G.globalAlpha=.88;
+  G.globalAlpha=.55;
   for(var i=-1;i<6;i++){ var bx=i*180-((cm*k)%180)+cm, h=10+((i*37)&15);
     if(key==="meadow"){ for(var b=0;b<9;b++) px(bx+b*5,WH-h-((b*13)%9),3,h+((b*13)%9),col); }
     else if(key==="dungeon"||key==="room"){ px(bx,WH-14,46,14,col); px(bx+6,WH-22,34,8,col); }
@@ -2364,10 +2360,6 @@ function drawExit(){
 
 /* ================= grapple points and swinging ================= */
 var ANCH=[];
-function buildAnchors(){
-  var W=WORLDW, top=Math.max(70,Math.min(165,GROUND-40));
-  ANCH=[0.1,0.27,0.44,0.61,0.78,0.94].map(function(f,i){ return {x:Math.round(W*f)+((i*37)%34)-17, z:top-((i*23)%28), i:i}; });
-}
 function drawAnchors(){
   var key=S.room?"room":S.map, t=S.frames;
   for(var i=0;i<ANCH.length;i++){ var a=ANCH[i], y=GROUND-a.z;
@@ -2466,18 +2458,8 @@ function drawAtmos(){
    just by fighting near them, and his slams knock chunks off, until they
    collapse into rubble. */
 var STRUCTS=[], CLIMBERS={weaver:1,goliath:1,ironclad:1};
-function buildStructs(){
-  var W=WORLDW, key=S.room?"room":S.map, top=Math.max(80,Math.min(150,GROUND-50));
-  STRUCTS=[0.31,0.67].map(function(f,i){
-    var w=(key==="meadow")?44:(key==="palace"?40:60), h=Math.round(top*(i?0.92:1));
-    var s={x0:Math.round(W*f-w/2),x1:Math.round(W*f+w/2),maxh:h,h:h,hp:220,maxhp:220,key:key,i:i,dust:0};
-    s.roof={x0:s.x0+2,x1:s.x1-2,z:h,st:s};
-    return s;
-  });
-}
 function liveStructs(){ return STRUCTS.filter(function(s){ return s.hp>0; }); }
 /* every surface you can land on: floating platforms and standing rooftops */
-function surfaces(){ return PLATS.concat(liveStructs().map(function(s){ return s.roof; })); }
 function hurtStruct(s,amt){
   if(s.hp<=0) return;
   s.hp-=amt;
@@ -2518,47 +2500,6 @@ function updClimb(h){
   else if(h.z<=0){ h.st="idle"; h.clS=null; }
   h.clRel=0; h.fy=GROUND-h.z;
 }
-function drawStructs(){
-  var t=S.frames;
-  STRUCTS.forEach(function(s){
-    var cx=(s.x0+s.x1)/2, w=s.x1-s.x0;
-    if(s.hp<=0){ /* rubble */
-      for(var r=0;r<7;r++) px(s.x0-6+r*((w+12)/7),GROUND-6-((r*5)%7),(w+12)/6,6+((r*5)%7),r%2?"#4a4038":"#6a5a48");
-      return; }
-    var y=GROUND-s.h, dmg=1-s.hp/s.maxhp, k=s.key;
-    if(k==="town"){
-      px(s.x0-1,y,w+2,s.h,"#1a0e08"); px(s.x0,y,w,s.h,"#7a3a2a");
-      for(var by=y+4;by<GROUND;by+=8) px(s.x0,by,w,1,"#5a2a1e");
-      for(var wy=y+12;wy<GROUND-20;wy+=26) for(var wx=s.x0+8;wx<s.x1-10;wx+=20){ px(wx,wy,10,12,"#2a1a10"); px(wx+1,wy+1,8,10,(t+wx)%300<280?"#ffd27a":"#c8a050"); }
-      if(dmg<0.35){ px(s.x0-6,y-2,w+12,6,"#4a2e18"); px(s.x0-2,y-8,w+4,6,"#6a4420"); }
-      px(cx-6,GROUND-20,12,20,"#3a2414");
-    } else if(k==="meadow"){
-      px(cx-8,y+16,16,s.h-16,"#4a3020"); px(cx-8,y+16,4,s.h-16,"#6a4a2a");
-      disc(cx,y+6,26-dmg*10,"#2f6a24"); disc(cx-14,y+16,16-dmg*6,"#3f7a2e"); disc(cx+14,y+14,17-dmg*6,"#3f7a2e");
-      px(cx-24,y,48,4,"#3a2814");
-    } else if(k==="palace"){
-      px(s.x0,y,w,s.h,"#d8d0c0"); px(s.x0,y,6,s.h,"#ffffff"); px(s.x1-5,y,5,s.h,"#b8b0a0");
-      px(s.x0-6,y,w+12,8,"#e0c256"); px(s.x0-4,GROUND-10,w+8,10,"#c8c0b0");
-    } else if(k==="wasteland"){
-      for(var sy=y;sy<GROUND;sy+=6){ var ww=w*(0.6+0.4*(sy-y)/s.h); px(cx-ww/2,sy,ww,6,((sy/6)|0)%2?"#5a4434":"#6a5444"); }
-      px(s.x0+4,y,w-8,4,"#7a6454");
-    } else if(k==="room"){
-      for(var cy=GROUND-20;cy>y-1;cy-=20){ px(s.x0,cy,w,20,"#5a3a1a"); px(s.x0,cy,w,3,"#7a5228"); px(s.x0+w/2-1,cy,2,20,"#3a2410"); }
-    } else {
-      for(var ty=y;ty<GROUND;ty+=11){ var off=((ty/11)|0)%2?8:0;
-        for(var tx=s.x0-off;tx<s.x1;tx+=16) px(Math.max(s.x0,tx)+1,ty+1,Math.min(15,s.x1-Math.max(s.x0,tx)-1),9,(tx+ty)%3?"#3a2c46":"#2f2440"); }
-      px(s.x0-3,y-4,w+6,5,"#54425f");
-    }
-    /* damage: a jagged broken top and spreading cracks */
-    if(dmg>0.15){ for(var j=0;j<w;j+=6) px(s.x0+j,y-((j*7)%5),6,3+((j*7)%5),"#120a10"); }
-    if(dmg>0.3) { px(cx-2,y+10,2,s.h*0.3,"#120a10"); px(cx,y+10+s.h*0.3,8,2,"#120a10"); }
-    if(dmg>0.6) { px(s.x0+6,y+s.h*0.4,2,s.h*0.35,"#120a10"); px(s.x1-10,y+s.h*0.2,2,s.h*0.4,"#120a10"); }
-    var h=S.hero;
-    if(h&&CLIMBERS[h.id]&&h.st!=="climb"&&h.x>=s.x0-6&&h.x<=s.x1+6&&h.z<s.h-8){
-      G.font="6px 'Press Start 2P',monospace"; G.textAlign="center";
-      G.fillStyle="#000"; G.fillText("▲ CLIMB",cx+1,y-9); G.fillStyle="#fff"; G.fillText("▲ CLIMB",cx,y-10); }
-  });
-}
 /* one context button for touch screens: SWING or CLIMB when either is possible */
 var ctxOn="";
 function updCtxBtn(){
@@ -2571,6 +2512,119 @@ function updCtxBtn(){
   }
   if(lab!==ctxOn){ ctxOn=lab; var el=document.getElementById('bCtx');
     el.style.display=lab?"":"none"; document.getElementById('ctxLbl').textContent=lab; }
+}
+
+/* ================= stage layout ================= */
+/* Every map uses the same mirrored layout so it reads cleanly:
+   a climbable structure on each side with a step ledge facing the middle,
+   one floating platform in the centre, and grab points over the gaps.
+   Heights are set so a normal jump reaches ledge from floor and roof
+   from ledge (a full jump rises about 83). */
+var LAYOUT={structX:[0.22,0.78],centre:0.5};
+function stageH(){ return Math.max(90,Math.min(126,GROUND-70)); }
+function buildPlats(){
+  var W=WORLDW, c=Math.round(W*LAYOUT.centre), z=Math.round(stageH()*0.74);
+  PLATS=[{x0:c-50,x1:c+50,z:z}];
+}
+function buildStructs(){
+  var W=WORLDW, key=S.room?"room":S.map, H=stageH();
+  STRUCTS=LAYOUT.structX.map(function(f,i){
+    var w=(key==="meadow")?50:62, cx=Math.round(W*f);
+    var s={x0:cx-w/2,x1:cx+w/2,maxh:H,h:H,hp:220,maxhp:220,key:key,i:i,inner:i?-1:1};
+    s.roof={x0:s.x0+2,x1:s.x1-2,z:H,st:s};
+    /* the step ledge sticks out on the side facing the middle */
+    var lz=Math.round(H*0.5);
+    s.ledge=(s.inner>0)?{x0:s.x1-6,x1:s.x1+38,z:lz,st:s}:{x0:s.x0-38,x1:s.x0+6,z:lz,st:s};
+    return s;
+  });
+}
+function buildAnchors(){
+  var W=WORLDW, z=Math.round(stageH()*1.3);
+  ANCH=[0.36,0.64].map(function(f,i){ return {x:Math.round(W*f),z:z,i:i}; });
+}
+function surfaces(){
+  var out=PLATS.slice();
+  liveStructs().forEach(function(s){ out.push(s.roof); if(s.h>s.ledge.z+10) out.push(s.ledge); });
+  return out;
+}
+/* palette per map: outline, dark, mid, light, accent */
+var STRUCTPAL={
+  town:     ["#1a0e08","#5a2a1e","#7a3a2a","#9a5038","#ffd27a"],
+  meadow:   ["#140c04","#3a2814","#4f3420","#6a4a2a","#3f7a2e"],
+  dungeon:  ["#0c0814","#241a30","#33253f","#4a3a58","#ff9a3a"],
+  wasteland:["#140c08","#4a3a30","#5f4a3c","#7a6050","#c8602a"],
+  palace:   ["#5a5040","#b8b0a0","#d8d0c0","#f4f0e8","#e0c256"],
+  room:     ["#140a04","#4a3018","#5a3a1a","#7a5228","#ffb347"]};
+/* every surface you can stand on gets the same bright top edge */
+function drawStandLines(){
+  if(S.scene!=="fight") return;
+  var L=surfaces(), pulse=0.5+Math.sin(S.frames*0.06)*0.12;
+  for(var i=0;i<L.length;i++){ var p=L[i], y=GROUND-p.z;
+    G.globalAlpha=pulse; px(p.x0,y-1,p.x1-p.x0,2,"#fff6d0"); G.globalAlpha=1; }
+}
+function drawLedge(s,P){
+  var L=s.ledge, y=GROUND-L.z, w=L.x1-L.x0, k=s.key;
+  if(k==="meadow"){ /* a thick branch with leaves */
+    px(L.x0-1,y-1,w+2,7,P[0]); px(L.x0,y,w,5,P[2]); px(L.x0,y,w,2,P[3]);
+    disc(L.x0+(s.inner>0?w-6:6),y-6,9,"#2f6a24"); disc(L.x0+(s.inner>0?w-14:14),y-9,7,"#3f7a2e");
+  } else if(k==="town"||k==="palace"){ /* a balcony with a rail */
+    px(L.x0-1,y-1,w+2,7,P[0]); px(L.x0,y,w,5,P[1]); px(L.x0,y,w,2,P[3]);
+    px(L.x0,y-10,w,2,P[k==="palace"?4:3]); for(var r=2;r<w;r+=6) px(L.x0+r,y-9,2,9,P[0]);
+    px(L.x0+(s.inner>0?w-4:2),y+5,2,8,P[0]);
+  } else { /* a stone or rock shelf with a brace underneath */
+    px(L.x0-1,y-1,w+2,8,P[0]); px(L.x0,y,w,6,P[2]); px(L.x0,y,w,2,P[3]);
+    for(var b=0;b<8;b++) px(L.x0+(s.inner>0?w-10+b:2+(8-b)),y+6+b,10-b,1,P[1]);
+  }
+}
+function drawStructs(){
+  STRUCTS.forEach(function(s){
+    var cx=(s.x0+s.x1)/2, w=s.x1-s.x0, P=STRUCTPAL[s.key]||STRUCTPAL.dungeon;
+    G.globalAlpha=.25; px(s.x0-4,GROUND+1,w+8,4,"#000"); G.globalAlpha=1;
+    if(s.hp<=0){
+      for(var r=0;r<6;r++){ var rw=(w+16)/6; px(s.x0-8+r*rw,GROUND-4-((r*5)%7),rw-1,4+((r*5)%7),r%2?P[1]:P[2]); }
+      return; }
+    var y=GROUND-s.h, dmg=1-s.hp/s.maxhp, k=s.key;
+    if(k==="meadow"){
+      /* trunk, then a full canopy sitting on the roof line */
+      px(cx-9,y,18,s.h,P[0]); px(cx-8,y,16,s.h,P[2]); px(cx-8,y,5,s.h,P[3]); px(cx+4,y,4,s.h,P[1]);
+      px(cx-14,GROUND-6,28,6,P[1]);
+      var cr=Math.round(30-dmg*10);
+      disc(cx,y-4,cr+1,"#16330f"); disc(cx,y-4,cr,"#2f6a24"); disc(cx-cr*0.5,y-cr*0.35,cr*0.6,"#3f7a2e"); disc(cx+cr*0.45,y-cr*0.45,cr*0.55,"#4a8a34");
+      px(s.x0,y-1,w,3,P[1]);
+    } else {
+      /* body: outline, base colour, lit left edge, shaded right edge */
+      px(s.x0-1,y,w+2,s.h,P[0]); px(s.x0,y,w,s.h,P[2]); px(s.x0,y,4,s.h,P[3]); px(s.x1-4,y,4,s.h,P[1]);
+      if(k==="town"){
+        for(var by=y+6;by<GROUND;by+=7) px(s.x0+4,by,w-8,1,P[1]);
+        for(var wy=y+12;wy<GROUND-26;wy+=28) for(var wx=s.x0+10;wx<s.x1-14;wx+=24){
+          px(wx-1,wy-1,14,16,P[0]); px(wx,wy,12,14,"#3a2414"); px(wx+1,wy+1,10,12,P[4]); px(wx+5,wy,2,14,P[0]); }
+        px(cx-7,GROUND-22,14,22,P[0]); px(cx-6,GROUND-21,12,21,"#4a2e18");
+        if(dmg<0.35){ for(var rf=0;rf<10;rf++) px(s.x0-6+rf,y-10+rf,w+12-rf*2,1,rf<2?P[0]:"#3a1e14"); }
+      } else if(k==="palace"){
+        for(var fl=s.x0+10;fl<s.x1-6;fl+=12) px(fl,y+10,2,s.h-20,P[1]);
+        px(s.x0-6,y-6,w+12,8,P[0]); px(s.x0-5,y-5,w+10,6,P[4]); px(s.x0-6,GROUND-10,w+12,10,P[1]);
+      } else if(k==="room"){
+        for(var cy2=GROUND-24;cy2>y-1;cy2-=24){ px(s.x0,cy2,w,1,P[0]); px(s.x0+6,cy2+4,w-12,16,P[1]); stroke(s.x0+6,cy2+4,s.x1-6,cy2+20,2,P[3]); }
+      } else if(k==="wasteland"){
+        for(var st=y+8;st<GROUND;st+=12) px(s.x0+4,st,w-8,2,P[1]);
+        px(s.x0+8,y+14,6,4,P[4]); px(s.x1-16,y+40,6,4,P[4]);
+      } else {
+        for(var ty=y;ty<GROUND;ty+=12){ var off=((ty/12)|0)%2?10:0;
+          for(var tx=s.x0+off;tx<s.x1;tx+=20) px(tx,ty,1,12,P[0]); px(s.x0,ty,w,1,P[0]); }
+        if(dmg<0.35) for(var bt=0;bt<w;bt+=12) px(s.x0+bt,y-6,8,6,P[2]);
+        px(cx-2,y+18,4,8,P[4]); G.globalAlpha=.15; disc(cx,y+22,14,P[4]); G.globalAlpha=1;
+      }
+    }
+    if(s.h>s.ledge.z+10) drawLedge(s,P);
+    /* wear: a broken top edge and cracks that spread as it weakens */
+    if(dmg>0.15) for(var j=0;j<w;j+=6) px(s.x0+j,y-((j*7)%5),6,2+((j*7)%5),P[0]);
+    if(dmg>0.35){ stroke(cx-4,y+8,cx+6,y+s.h*0.35,1.5,P[0]); }
+    if(dmg>0.65){ stroke(s.x0+8,y+s.h*0.3,s.x0+16,y+s.h*0.7,1.5,P[0]); stroke(s.x1-10,y+s.h*0.2,s.x1-6,y+s.h*0.55,1.5,P[0]); }
+    var h=S.hero;
+    if(h&&CLIMBERS[h.id]&&h.st!=="climb"&&h.x>=s.x0-6&&h.x<=s.x1+6&&h.z<s.h-8){
+      G.font="6px 'Press Start 2P',monospace"; G.textAlign="center";
+      G.fillStyle="#000"; G.fillText("▲ CLIMB",cx+1,y-15); G.fillStyle="#fff"; G.fillText("▲ CLIMB",cx,y-16); }
+  });
 }
 
 /* ================= doors & rooms ================= */
@@ -3097,8 +3151,10 @@ function updHero(){
   if(h.onPlat&&(h.x<h.onPlat.x0-3||h.x>h.onPlat.x1+3||h.vz>0)){ if(h.vz<=0) h.coy=6; h.onPlat=null; }
   if(h.onPlat){ h.z=h.onPlat.z; h.vz=0; }
   else { h.vz-=gv; h.z+=h.vz;
-    if(h.vz<0&&!(h.dropT>0)){ var SF=surfaces(); for(var pi=0;pi<SF.length;pi++){ var pl=SF[pi];
-      if(h.x>=pl.x0&&h.x<=pl.x1&&z0>=pl.z&&h.z<=pl.z){ h.z=pl.z; h.vz=0; h.onPlat=pl; h.jumps=0; h.airDash=0; h.flewAir=0;
+    if(h.vz<1.5&&!(h.dropT>0)){ var SF=surfaces(); for(var pi=0;pi<SF.length;pi++){ var pl=SF[pi];
+      var over=(h.vz<0&&h.x>=pl.x0&&h.x<=pl.x1&&z0>=pl.z&&h.z<=pl.z);
+      var grab=(h.st!=="dive"&&h.x>=pl.x0-6&&h.x<=pl.x1+6&&h.z<pl.z&&pl.z-h.z<16);
+      if(over||grab){ if(grab&&!over){ spark(h.x,GROUND-pl.z,3,"#cfc3b0",1.5,1); } h.z=pl.z; h.vz=0; h.onPlat=pl; h.jumps=0; h.airDash=0; h.flewAir=0;
         if(h.st==="dive") diveImpact(h); break; } } } }
   if(h.dropT>0) h.dropT--;
   if(h.coy>0) h.coy--;
