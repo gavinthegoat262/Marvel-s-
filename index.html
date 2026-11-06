@@ -2472,7 +2472,7 @@ function drawStandLines(){
 /* The canvas is drawn HD times finer than the game grid. Structures are
    painted once per fight, pixel by pixel at that density, into their own
    images; every frame then just places (and crops, tilts or shatters) them. */
-var HD=1, TD=3;
+var HD=1, TD=2;
 function hexRGB(h){ return [parseInt(h.substr(1,2),16),parseInt(h.substr(3,2),16),parseInt(h.substr(5,2),16)]; }
 function mulC(c,f){ return [c[0]*f,c[1]*f,c[2]*f]; }
 function mixC(a,b,t){ return [a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t]; }
