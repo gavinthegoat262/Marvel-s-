@@ -2275,7 +2275,7 @@ function drawSecret(){
     px(x-19,GROUND-5,38,5,"#1a0e18"); px(x-18,GROUND-5,36,4,"#4a2e22");
     px(x-9,top+16,18,32,"#1a0e18"); px(x-8,top+17,16,31,"#0c0610");
     for(var v=0;v<5-hits;v++){ px(x-8+v*4,top+15,2,30,"#2f7a2c"); px(x-8+v*4,top+15+((v*7)%9),2,2,"#7eb83a"); }
-    G.drawImage(hi,0,0,hi.width,Math.round(hi.height*0.62),Math.round(x-hi.width/2),ty-Math.round(hi.height*0.62)+38,hi.width,Math.round(hi.height*0.62));
+    var hh2=Math.round(hi.gh*0.62); G.drawImage(hi,0,0,hi.width,hh2*TD,Math.round(x-hi.gw/2),ty-hh2+38,hi.gw,hh2);
   } else if(m==="wasteland"){
     px(x-24,top-16,48,74,"#4a3a30"); px(x-24,top-16,48,4,"#6a5444");
     px(x-14,top,28,58,"#120a06");
@@ -2472,7 +2472,7 @@ function drawStandLines(){
 /* The canvas is drawn HD times finer than the game grid. Structures are
    painted once per fight, pixel by pixel at that density, into their own
    images; every frame then just places (and crops, tilts or shatters) them. */
-var HD=2;
+var HD=1, TD=3;
 function hexRGB(h){ return [parseInt(h.substr(1,2),16),parseInt(h.substr(3,2),16),parseInt(h.substr(5,2),16)]; }
 function mulC(c,f){ return [c[0]*f,c[1]*f,c[2]*f]; }
 function mixC(a,b,t){ return [a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t]; }
@@ -2486,12 +2486,12 @@ function smoothN(x,y,s){ /* cheap value noise */
   var a=hsh(xi,yi,s), b=hsh(xi+1,yi,s), c=hsh(xi,yi+1,s), d=hsh(xi+1,yi+1,s);
   fx=fx*fx*(3-2*fx); fy=fy*fy*(3-2*fy);
   return a+(b-a)*fx+(c-a)*fy+(a-b-c+d)*fx*fy; }
-function PixBuf(w,h){ this.w=w; this.h=h; this.d=new Uint8ClampedArray(w*h*4); }
+function PixBuf(w,h,u){ this.u=u||1; this.w=w; this.h=h; this.d=new Uint8ClampedArray(w*h*4); }
 PixBuf.prototype.set=function(x,y,c){ x|=0; y|=0; if(x<0||y<0||x>=this.w||y>=this.h||!c) return;
   var i=(y*this.w+x)*4; this.d[i]=c[0]; this.d[i+1]=c[1]; this.d[i+2]=c[2]; this.d[i+3]=255; };
 PixBuf.prototype.on=function(x,y){ return x>=0&&y>=0&&x<this.w&&y<this.h&&this.d[(y*this.w+x)*4+3]>0; };
 /* paint every pixel through f(x,y) in game units; f returns a colour or null */
-PixBuf.prototype.fill=function(f){ var u=HD;
+PixBuf.prototype.fill=function(f){ var u=this.u;
   for(var y=0;y<this.h;y++) for(var x=0;x<this.w;x++){ var c=f(x/u,y/u,x,y); if(c) this.set(x,y,c); } };
 /* a 1-fine-pixel dark rim wherever the shape meets empty space */
 PixBuf.prototype.outline=function(c){ var w=this.w,h=this.h,src=new Uint8ClampedArray(this.d), on=function(x,y){ return x>=0&&y>=0&&x<w&&y<h&&src[(y*w+x)*4+3]>0; };
@@ -2519,7 +2519,7 @@ var OUTLINE=hexRGB("#0a0608");
 /* ---- the painters: each returns {buf, ox, oy} in fine pixels;
    (ox,oy) is where the structure's left wall and roof line sit in the image ---- */
 function paintHouse(w,H,seed){
-  var u=HD, pad=6, top=18, b=new PixBuf((w+pad*2)*u,(H+top)*u), R=RAMPS;
+  var u=1, pad=6, top=18, b=new PixBuf((w+pad*2)*u,(H+top)*u), R=RAMPS;
   var winCols=[w*0.27,w*0.73], door=w/2;
   b.fill(function(X,Y,x,y){
     var wx=X-pad, wy=Y-top;
@@ -2570,7 +2570,7 @@ function paintHouse(w,H,seed){
   return {buf:b,ox:pad*u,oy:top*u,pad:pad,top:top};
 }
 function paintTower(w,H,seed){
-  var u=HD, pad=4, top=9, b=new PixBuf((w+pad*2)*u,(H+top)*u), R=RAMPS;
+  var u=1, pad=4, top=9, b=new PixBuf((w+pad*2)*u,(H+top)*u), R=RAMPS;
   b.fill(function(X,Y,x,y){
     var wx=X-pad, wy=Y-top;
     if(wy<0){ if(wx<-2||wx>w+2) return null; var mer=((wx+2)%10)<6; if(!mer||wy<-8) return null;
@@ -2599,7 +2599,7 @@ function paintTower(w,H,seed){
   return {buf:b,ox:pad*u,oy:top*u,pad:pad,top:top};
 }
 function paintSpire(w,H,seed){
-  var u=HD, pad=8, top=4, b=new PixBuf((w+pad*2)*u,(H+top)*u), R=RAMPS;
+  var u=1, pad=8, top=4, b=new PixBuf((w+pad*2)*u,(H+top)*u), R=RAMPS;
   b.fill(function(X,Y,x,y){
     var wx=X-pad-w/2, wy=Y-top;
     var half=(w/2+3)*(0.55+0.45*Math.max(0,wy)/H)+(smoothN(wy*0.2,1,seed)-0.5)*4;
@@ -2616,7 +2616,7 @@ function paintSpire(w,H,seed){
   return {buf:b,ox:pad*u,oy:top*u,pad:pad,top:top};
 }
 function paintColumn(w,H,seed){
-  var u=HD, pad=8, top=8, b=new PixBuf((w+pad*2)*u,(H+top)*u), R=RAMPS;
+  var u=1, pad=8, top=8, b=new PixBuf((w+pad*2)*u,(H+top)*u), R=RAMPS;
   b.fill(function(X,Y,x,y){
     var wx=X-pad, wy=Y-top, sh=w-10;
     /* capital: gold block with scrolled ends and a row of dentils */
@@ -2640,7 +2640,7 @@ function paintColumn(w,H,seed){
   return {buf:b,ox:pad*u,oy:top*u,pad:pad,top:top};
 }
 function paintCrates(w,H,seed){
-  var u=HD, pad=2, top=0, b=new PixBuf((w+pad*2)*u,(H+top)*u), R=RAMPS, ch=H/Math.max(3,Math.round(H/22));
+  var u=1, pad=2, top=0, b=new PixBuf((w+pad*2)*u,(H+top)*u), R=RAMPS, ch=H/Math.max(3,Math.round(H/22));
   b.fill(function(X,Y,x,y){
     var row=Math.floor(Y/ch), shift=(row%2?2:-1), wx=X-pad-shift, cy=Y-row*ch;
     if(wx<0||wx>w) return null;
@@ -2658,7 +2658,7 @@ function paintCrates(w,H,seed){
 }
 /* the step ledge: balcony, branch or stone shelf */
 function paintLedge(kind,w,seed,inner){
-  var u=HD, H=14, b=new PixBuf(w*u,H*u), R=RAMPS;
+  var u=1, H=14, b=new PixBuf(w*u,H*u), R=RAMPS;
   b.fill(function(X,Y,x,y){
     var ox=inner>0?X:w-X;
     if(kind==="branch"){ var thick=3.4-ox/w*1.6, cyb=5+ox*0.04;
@@ -2689,7 +2689,7 @@ function buildStructs(){
     var lx=(key==="meadow")?cx+(s.inner>0?4:-4):(s.inner>0?s.x1-6:s.x0+6);
     s.ledge=(s.inner>0)?{x0:lx,x1:lx+44,z:lz,st:s}:{x0:lx-44,x1:lx,z:lz,st:s};
     var p=(PAINT[key]||paintTower)(w,H,seed);
-    s.sp={img:p.buf.canvas(),buf:p.buf,pad:p.pad,top:p.top};
+    s.sp={img:p.buf.canvas(),buf:p.buf,pad:p.pad,top:p.top,u:p.buf.u||1};
     s.ledgeImg=paintLedge(LEDGEKIND[key]||"shelf",44,seed,s.inner);
     /* where it will crack and hole as it weakens, decided up front */
     s.cracks=[]; for(var c=0;c<5;c++){ var pts=[], x=w*(0.2+hsh(c,1,seed)*0.6), y=4+hsh(c,2,seed)*H*0.3;
@@ -2703,7 +2703,7 @@ function buildStructs(){
 }
 /* where the sprite sits in the world, and how much of the top has crumbled away */
 function spriteBox(s){
-  var img=s.sp.img, u=HD, gone=(s.h<s.maxh-0.5)?(s.maxh-s.h+s.sp.top):0;
+  var img=s.sp.img, u=s.sp.u||1, gone=(s.h<s.maxh-0.5)?(s.maxh-s.h+s.sp.top):0;
   return {img:img,x:s.x0-s.sp.pad,y:GROUND-s.maxh-s.sp.top,w:img.width/u,h:img.height/u,crop:gone};
 }
 function fineLine(x1,y1,x2,y2,col,col2){
@@ -2714,7 +2714,7 @@ function fineLine(x1,y1,x2,y2,col,col2){
 }
 function drawStructs(){
   STRUCTS.forEach(function(s){
-    var B=spriteBox(s), u=HD, w=s.x1-s.x0, R=RUBBLE[s.key]||RAMPS.stone;
+    var B=spriteBox(s), u=s.sp.u||1, w=s.x1-s.x0, R=RUBBLE[s.key]||RAMPS.stone;
     if(s.gone){ drawRubble(s); return; }
     if(s.coll){ /* toppling: the whole sprite tilts around its base corner */
       G.save(); G.translate(s.coll.px,GROUND); G.rotate(s.coll.ang*s.coll.dir);
@@ -2742,7 +2742,7 @@ function damageOverlay(s,dmg){
   var key=s.cracks.filter(function(c){ return dmg>=c.th; }).length*10+s.holes.filter(function(h){ return dmg>=h.th; }).length;
   if(!key) return null;
   if(s.ovKey===key) return s.ov;
-  var u=HD, B=s.sp, b=new PixBuf(B.img.width,B.img.height), dark=hexRGB("#0a0608"), lite=null;
+  var u=s.sp.u||1, B=s.sp, b=new PixBuf(B.img.width,B.img.height,u), dark=hexRGB("#0a0608"), lite=null;
   var X=function(x){ return Math.round((x+B.pad)*u); }, Y=function(y){ return Math.round((y+B.top)*u); };
   s.cracks.forEach(function(c){ if(dmg<c.th) return;
     for(var k=1;k<c.pts.length;k++){ var a=c.pts[k-1], d=c.pts[k], n=Math.ceil(Math.max(Math.abs(d[0]-a[0]),Math.abs(d[1]-a[1]))*u);
@@ -2756,7 +2756,7 @@ function damageOverlay(s,dmg){
   s.ovKey=key; s.ov=b.canvas(); return s.ov;
 }
 function makeRubble(s){
-  var R=RUBBLE[s.key]||RAMPS.stone, u=HD, w=s.x1-s.x0, W=w+30, Hh=16, b=new PixBuf(W*u,Hh*u);
+  var R=RUBBLE[s.key]||RAMPS.stone, u=1, w=s.x1-s.x0, W=w+30, Hh=16, b=new PixBuf(W*u,Hh*u);
   b.fill(function(X,Y,x,y){ var hgt=(1-Math.abs((X-W/2)/(W/2)))*12+smoothN(X*0.35,0,s.seed)*5-2, yy=Hh-Y;
     if(yy>hgt||hgt<=0) return null;
     var lump=smoothN(X*0.6,yy*0.6,s.seed+1); return rampC(R,0.2+lump*0.65,x,y); });
@@ -2768,7 +2768,7 @@ function drawRubble(s){
   G.drawImage(s.rub,base-15,GROUND-16+1,w+30,16);
 }
 function drawRubbleOld(s){
-  var R=RUBBLE[s.key]||RAMPS.stone, u=HD, w=s.x1-s.x0, base=s.x0+s.coll.dir*14;
+  var R=RUBBLE[s.key]||RAMPS.stone, u=1, w=s.x1-s.x0, base=s.x0+s.coll.dir*14;
   for(var i=0;i<w+30;i+=1/u){ var hgt=Math.max(0,(1-Math.abs((i-(w+30)/2)/((w+30)/2)))*12+smoothN(i*0.35,0,s.seed)*5-2);
     if(hgt<=0) continue;
     for(var y=0;y<hgt;y+=1/u){ var col=rampC(R,0.25+smoothN(i*0.6,y*0.6,s.seed+1)*0.6-(y<0.6?0.2:0),Math.round(i*u),Math.round(y*u));
@@ -2777,7 +2777,7 @@ function drawRubbleOld(s){
 }
 /* bits of the sprite itself: chips on hits, everything on a collapse */
 function chipsFrom(s,lx,ly,n,spread,big){
-  var u=HD, B=s.sp;
+  var u=s.sp.u||1, B=s.sp;
   for(var i=0;i<n;i++){ var sz=(big?4:2)+Math.random()*(big?4:2), sx=lx+B.pad+(Math.random()-.5)*6, sy=ly+B.top+(Math.random()-.5)*6;
     var px2=Math.round(sx*u), py2=Math.round(sy*u);
     if(!B.buf.on(px2,py2)) continue;
@@ -2805,7 +2805,7 @@ function beginCollapse(s){
   var h=S.hero; if(h&&(h.onPlat===s.roof||h.onPlat===s.ledge||h.clS===s)){ h.onPlat=null; h.clS=null; if(h.st==="climb") h.st="idle"; h.vz=1.5; }
 }
 function shatter(s){
-  var c=s.coll, B=spriteBox(s), u=HD, th=c.ang*c.dir, cs=Math.cos(th), sn=Math.sin(th), om=c.va*c.dir;
+  var c=s.coll, B=spriteBox(s), u=s.sp.u||1, th=c.ang*c.dir, cs=Math.cos(th), sn=Math.sin(th), om=c.va*c.dir;
   var step=7, cols=Math.ceil(B.w/step), rows=Math.ceil((B.h-B.crop)/step);
   for(var r=0;r<rows;r++) for(var k=0;k<cols;k++){
     var lx=k*step+step/2, ly=B.crop+r*step+step/2;
@@ -2890,11 +2890,20 @@ function makeClumps(cx,cy,rx,ry,seed,size){
   var m=Math.round((rx+ry)*0.8/size)+8;
   for(var k=0;k<m;k++){ var b=k/m*Math.PI*2; C.push({x:cx+Math.cos(b)*rx*0.84, y:cy+Math.sin(b)*ry*0.84, r:size*(0.85+hsh(k,14,seed)*0.3)}); }
   C.sort(function(p,q){ return p.y-q.y; });
-  return C;
+  return clumpGrid(C);
 }
 /* colour of one canopy pixel, or null; L is a dark-to-light leaf palette */
+function clumpGrid(C){
+  var cell=0; C.forEach(function(c){ cell=Math.max(cell,c.r); }); cell=Math.max(1,cell);
+  var G2={}; C.forEach(function(c,i){ c.i=i;
+    for(var gx=Math.floor((c.x-c.r)/cell);gx<=Math.floor((c.x+c.r)/cell);gx++)
+      for(var gy=Math.floor((c.y-c.r)/cell);gy<=Math.floor((c.y+c.r)/cell);gy++){ var k=gx+","+gy; (G2[k]=G2[k]||[]).push(c); } });
+  for(var k in G2) G2[k].sort(function(a,b){ return a.i-b.i; });
+  C.grid=G2; C.cell=cell; return C;
+}
 function clumpPixel(X,Y,C,L,cx,cy,rx,ry,seed){
-  for(var i=C.length-1;i>=0;i--){ var c=C[i], dx=X-c.x, dy=Y-c.y, d2=dx*dx+dy*dy;
+  var list=C.grid?(C.grid[Math.floor(X/C.cell)+","+Math.floor(Y/C.cell)]||[]):C;
+  for(var i=list.length-1;i>=0;i--){ var c=list[i], dx=X-c.x, dy=Y-c.y, d2=dx*dx+dy*dy;
     if(d2>=c.r*c.r) continue;
     /* how lit this clump is overall: brighter up and to the left */
     var g=0.5-(c.y-cy)/ry*0.34-(c.x-cx)/rx*0.2;
@@ -2912,8 +2921,9 @@ function clumpPixel(X,Y,C,L,cx,cy,rx,ry,seed){
 }
 function makeTree(kind,h,seed,sky,mix){
   var P=TREEPAL[kind], L=shiftPal(P.leaf,sky,mix), T=shiftPal(P.trunk,sky,mix);
-  var w=(kind==="pine")?Math.round(h*0.62):Math.min(84,Math.round(h*0.85)), b=new PixBuf(w+4,h+2), cx=(w+4)/2;
-  var size=Math.max(2.6,Math.min(4.6,h/11));
+  var w=(kind==="pine")?Math.round(h*0.62):Math.min(84,Math.round(h*0.85)), b=new PixBuf((w+4)*TD,(h+2)*TD,TD), cx=(w+4)/2;
+  /* clumps a few fine pixels across, so a tree carries many of them */
+  var size=Math.max(1.3,Math.min(2.1,h/24));
   if(kind==="pine"){
     var tiers=Math.max(3,Math.round(h/12)), top=1, bot=h*0.86;
     b.fill(function(X,Y,x,y){
@@ -2923,11 +2933,11 @@ function makeTree(kind,h,seed,sky,mix){
         if(Y<ty0||Y>ty1+2) continue;
         var k=(Y-ty0)/(ty1-ty0), hw=half*Math.min(1,k*1.05)+0.5;
         /* drooping, scalloped lower edge made of little clumps */
-        var cw=Math.max(3,size*1.3), u=((X-cx+half)%cw+cw)%cw, droop=Math.sqrt(Math.max(0,(cw/2)*(cw/2)-(u-cw/2)*(u-cw/2)))*0.6;
+        var cw=Math.max(1.5,size*1.2), u=((X-cx+half)%cw+cw)%cw, droop=Math.sqrt(Math.max(0,(cw/2)*(cw/2)-(u-cw/2)*(u-cw/2)))*0.7;
         if(Math.abs(X-cx)>hw||Y>ty1+droop-1) continue;
         var side=(X-cx)/Math.max(1,hw);
-        if(Y>ty1+droop-2.2) return L[0];
-        if(side<-0.15){ var hi=(u<cw*0.45&&(Y-ty0)%3<1.2); return L[hi?L.length-1:L.length-2]; }
+        if(Y>ty1+droop-0.9) return L[0];
+        if(side<-0.15){ var hi=(u<cw*0.45&&(Y-ty0)%1.4<0.5); return L[hi?L.length-1:L.length-2]; }
         if(side<0.35) return L[L.length-3];
         return L[Math.max(1,L.length-4)];
       }
@@ -2944,31 +2954,30 @@ function makeTree(kind,h,seed,sky,mix){
     b.fill(function(X,Y,x,y){
       var c=clumpPixel(X,Y,C,L,cx,ccy,rx,ry,seed); if(c) return c;
       /* trunk: bark grain on oaks, black dashes on birch, a little root flare */
-      var tw=(kind==="birch"?1.6:2.2+Math.max(0,h-60)/34)+(Y>h-3?(Y-(h-3))*0.9:0);
+      var tw=(kind==="birch"?1.6:2.2+Math.max(0,h-60)/34)+(Y>h-1.6?(Y-(h-1.6))*0.8:0);
       if(Math.abs(X-cx)<tw&&Y>ccy){
         var lx=X-cx;
-        if(kind==="birch"){ if(hsh(Math.round(Y),3,seed)>0.72&&lx<0.8) return T[0]; return lx>0.6?T[1]:(lx<-0.8?T[3]:T[2]); }
-        if(Math.round(lx+Y*0.15)%3===0) return T[1];
+        if(kind==="birch"){ if(hsh(y>>1,3,seed)>0.8&&lx<0.8) return T[0]; return lx>0.6?T[1]:(lx<-0.8?T[3]:T[2]); }
+        if((x+Math.round(y*0.2))%5===0) return T[1];
         return lx<-0.6?T[3]:(lx>0.8?T[1]:T[2]); }
       return null; });
   }
   var oc=mixC(hexRGB(kind==="birch"||kind==="oak"||kind==="pine"?"#0a1414":"#0a0814"),sky,mix*0.8); b.outline(oc);
-  return b.canvas();
+  var cv=b.canvas(); cv.u=TD; cv.gw=(w+4); cv.gh=(h+2); return cv;
 }
 
 /* the big climbable meadow tree, in the same clumped style */
 function paintTree(w,H,seed){
-  var pad=20, top=4, cw=w+pad*2, b=new PixBuf(cw,H+top), R=RAMPS, L=R.leaf, Bk=R.bark;
-  var cx=cw/2, rx=cw/2-8, ry=21, ccy=top+20, C=makeClumps(cx,ccy,rx,ry,seed,4.6);
+  var pad=20, top=4, cw=w+pad*2, b=new PixBuf(cw*TD,(H+top)*TD,TD), R=RAMPS, L=R.leaf, Bk=R.bark;
+  var cx=cw/2, rx=cw/2-8, ry=21, ccy=top+20, C=makeClumps(cx,ccy,rx,ry,seed,1.9);
   b.fill(function(X,Y,x,y){
-    var c=clumpPixel(X,Y,C,L,cx,ccy,rx,ry,seed); if(c){ if(hsh(x>>1,y>>1,seed+5)>0.997) return hexRGB("#d83a2a"); return c; }
+    var c=clumpPixel(X,Y,C,L,cx,ccy,rx,ry,seed); if(c){ if(hsh(x>>1,y>>1,seed+5)>0.998) return hexRGB("#d83a2a"); return c; }
     var by=Y-top, half=6+Math.max(0,(by-(H-10)))*0.9;
     if(by>18&&Math.abs(X-cx)<half&&by<H){
       var lx=X-cx;
       if(Math.abs(lx-2)<1.5&&Math.abs(by-46)<2) return Bk[0];
-      if(Math.round(lx*0.8+by*0.12)%3===0) return Bk[1];
+      if((x+Math.round(y*0.25))%6===0) return Bk[1];
       return lx<-half*0.45?Bk[4]:(lx>half*0.4?Bk[1]:(lx<0?Bk[3]:Bk[2])); }
-    if(by>H-3&&by<H&&Math.abs(X-cx)<w*0.7&&hsh(x>>1,0,seed)>0.45) return L[3];
     return null;
   });
   b.outline(hexRGB("#0a1414"));
@@ -2976,15 +2985,15 @@ function paintTree(w,H,seed){
 }
 /* a layer: rolling ground with a band of trees on it, wide enough for its scroll speed */
 function makeLayer(f,base,density,hmin,hmax,kinds,sky,mix,groundCol,seed){
-  var W=Math.ceil(WW+(WORLDW-WW)*f)+60, H=GROUND+2, cv=document.createElement('canvas'); cv.width=W; cv.height=H;
+  var W=Math.ceil(WW+(WORLDW-WW)*f)+60, H=GROUND+2, cv=document.createElement('canvas'); cv.width=W*TD; cv.height=H*TD;
   var g=cv.getContext('2d'); g.imageSmoothingEnabled=false;
   var gc=mixC(hexRGB(groundCol),sky,mix*0.9), gcs="rgb("+(gc[0]|0)+","+(gc[1]|0)+","+(gc[2]|0)+")";
   var trees=[]; for(var x=-10;x<W+10;x+=density*(0.6+hsh(x,1,seed)*0.8)) trees.push({x:x,h:hmin+hsh(x,2,seed)*(hmax-hmin),k:kinds[Math.floor(hsh(x,3,seed)*kinds.length)],s:Math.floor(x)});
   trees.forEach(function(t){ var im=makeTree(t.k,Math.round(t.h),t.s+seed,sky,mix); var by=base+Math.sin(t.x*0.02+seed)*4;
-    g.drawImage(im,Math.round(t.x-im.width/2),Math.round(by-im.height+2)); });
+    g.drawImage(im,Math.round((t.x-im.gw/2)*TD),Math.round((by-im.gh+2)*TD)); });
   g.fillStyle=gcs;
-  for(var gx=0;gx<W;gx++){ var top=Math.round(base+Math.sin(gx*0.02+seed)*4); g.fillRect(gx,top,1,H-top); }
-  return {cv:cv,f:f};
+  for(var gx=0;gx<W;gx++){ var top=Math.round(base+Math.sin(gx*0.02+seed)*4); g.fillRect(gx*TD,top*TD,TD,(H-top)*TD); }
+  return {cv:cv,f:f,w:W,h:H};
 }
 var MLAY=null;
 function buildMeadowLayers(){
@@ -2997,7 +3006,7 @@ function buildMeadowLayers(){
 function drawLayers(){
   if(S.room||S.map!=="meadow"||!MLAY) return;
   var cm=(S.scene==="fight")?(S.cam||0):0;
-  MLAY.forEach(function(L){ G.drawImage(L.cv,Math.round(cm*(1-L.f))-30,0); });
+  MLAY.forEach(function(L){ G.drawImage(L.cv,Math.round(cm*(1-L.f))-30,0,L.w,L.h); });
 }
 /* sky for the meadow: hard bands, a pixel sun, flat-shaded clouds */
 function paintMeadowSky(d){
@@ -3025,7 +3034,7 @@ function buildWorldTrees(){
     WTREES.push({x:Math.round(WORLDW*f),img:makeTree(k,h,i*31+7,sky,0)}); });
 }
 function drawWorldTrees(){
-  WTREES.forEach(function(t){ G.drawImage(t.img,Math.round(t.x-t.img.width/2),GROUND-t.img.height+2); });
+  WTREES.forEach(function(t){ G.drawImage(t.img,Math.round(t.x-t.img.gw/2),GROUND-t.img.gh+2,t.img.gw,t.img.gh); });
 }
 
 var MSKY=null;
@@ -4839,7 +4848,7 @@ function resize(){
   else { CV.style.inset=""; CV.style.left=""; CV.style.width=""; CV.style.height=""; CV.style.top=""; }
   document.body.classList.toggle('tall',tall);
   var rt=document.getElementById('rotate'); if(rt) rt.style.display=(tall&&!S.rotOk)?"flex":"none";
-  HD=1;
+  HD=TD;
   CV.width=WW*HD; CV.height=WH*HD;
   G=CV.getContext('2d'); G.imageSmoothingEnabled=false; G.setTransform(HD,0,0,HD,0,0);
   GROUND=WH-Math.round(Math.max(28,Math.min(118,WH*0.185)));
