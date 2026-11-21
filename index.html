@@ -12,7 +12,8 @@
 <style>
 :root{--sat:env(safe-area-inset-top,0px);--sar:env(safe-area-inset-right,0px);--sab:env(safe-area-inset-bottom,0px);--sal:env(safe-area-inset-left,0px);
   --hud:'Barlow Condensed','Arial Narrow',Arial,sans-serif;--big:'Anton',Impact,'Arial Black',sans-serif;--gold:#f5c542;--green:#5fd068}
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+html,body{touch-action:none;-webkit-text-size-adjust:100%;text-size-adjust:100%}.panel{touch-action:pan-y}
 html,body{margin:0;height:100%;overflow:hidden;background:#000;color:#fff;font-family:var(--hud);user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;overscroll-behavior:none}
 #c{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
 #hud{position:fixed;inset:0;pointer-events:none;display:none}
@@ -5673,6 +5674,23 @@ function drawGauges(c, D, m, gx, gy, gz, TL, ex, dt, ez, night, dim) {
   sg2(0, -.01, 0, .02, .01, [.7, 1, 1], 1.3); sg2(-.012, -.01, 0, .016, .006, [.7, 1, 1], 1.3); sg2(.012, -.01, 0, .016, .006, [.7, 1, 1], 1.3);
   for (let i = 0; i < 3; i++) sg2(-.1 + i * .012, .045, -.1 + i * .012 + .008, .045, .005, [.9, .9, 1], bright * .6); // header bar
 }
+
+// ---- no page zoom ----
+// Phones ignore user-scalable=no these days, so pinch and double-tap zoom are
+// blocked here, and so are ctrl+wheel / ctrl +/- on computers. If the page did
+// end up zoomed, the viewport is reset so it snaps back.
+(function () {
+  const vp = document.querySelector('meta[name=viewport]'), base = vp ? vp.content : '';
+  const unzoom = () => { if (!vp) return; vp.content = base + ',minimum-scale=1'; setTimeout(() => { vp.content = base; }, 60); };
+  for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(ev, e => { e.preventDefault(); if (ev === 'gestureend') unzoom(); }, { passive: false });
+  document.addEventListener('touchmove', e => { if ((e.scale && e.scale !== 1) || e.touches.length > 1 && !GAME.running) e.preventDefault(); }, { passive: false });
+  let lastTap = 0;
+  document.addEventListener('touchend', e => { const t = e.timeStamp; if (t - lastTap < 320 && e.touches.length === 0 && !(e.target.closest && e.target.closest('input,textarea,button,.mbtn,.seg'))) e.preventDefault(); lastTap = t; }, { passive: false });
+  document.addEventListener('dblclick', e => e.preventDefault(), { passive: false });
+  addEventListener('wheel', e => { if (e.ctrlKey) e.preventDefault(); }, { passive: false });
+  addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && ['Equal', 'Minus', 'NumpadAdd', 'NumpadSubtract', 'Digit0', 'Numpad0'].includes(e.code)) e.preventDefault(); });
+  if (window.visualViewport) visualViewport.addEventListener('resize', () => { if (visualViewport.scale > 1.01) unzoom(); });
+})();
 
 // ---- 16_net.js ----
 // ===================== ONLINE MULTIPLAYER =====================
